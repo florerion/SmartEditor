@@ -1,0 +1,36 @@
+{
+  "name": "md-wysiwyg-editor",
+  "version": "0.1.0",
+  "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
+  "type": "module",
+  "main": "dist/md-editor.cjs.js",
+  "module": "dist/md-editor.esm.js",
+  "browser": "dist/md-editor.iife.js",
+  "exports": {
+    ".": {
+      "import": "./dist/md-editor.esm.js",
+      "require": "./dist/md-editor.cjs.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/lang-markdown": "^6.3.1",
+    "@codemirror/language": "^6.10.8",
+    "@codemirror/state": "^6.5.1",
+    "@codemirror/view": "^6.36.3",
+    "dompurify": "^3.2.4",
+    "katex": "^0.16.21",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^15.3.1",
+    "rollup": "^4.34.9"
+  }
+}

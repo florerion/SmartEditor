@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>md-wysiwyg-editor — Demo (Etap 3)</title>
+  <!-- KaTeX CSS required for math rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+  <!-- Mermaid (optional — comment out to see fallback raw code) -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: false });</script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 18px; color: #1a1a1a; }
+
+    .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .controls button {
+      padding: 5px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      transition: border-color .15s, background .15s;
+    }
+    .controls button:hover { background: #f0f7ff; border-color: #3b82f6; }
+
+    #editor-container {
+      width: 100%;
+      height: calc(100vh - 90px);
+      min-height: 400px;
+    }
+
+    #log {
+      position: fixed;
+      bottom: 12px;
+      right: 16px;
+      width: 340px;
+      max-height: 140px;
+      overflow-y: auto;
+      background: rgba(0,0,0,.8);
+      color: #a6e22e;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>md-wysiwyg-editor — Etap 3</h1>
+
+    <div class="controls">
+      <button onclick="logMd()">getMarkdown()</button>
+      <button onclick="doSet()">setMarkdown()</button>
+      <button onclick="doInsert()">insertText()</button>
+      <button onclick="doPropose()">proposeChange()</button>
+      <button onclick="doRegister()">registerAction()</button>
+      <button onclick="toggleMode()">toggleMode()</button>
+      <button onclick="toggleTheme()">toggleTheme()</button>
+    </div>
+  </header>
+
+  <div id="editor-container"></div>
+  <pre id="log"></pre>
+
+  <script type="module">
+    import { createEditor } from '../dist/md-editor.esm.js';
+
+    // ------------------------------------------------------------------ //
+    // Initial content
+    // ------------------------------------------------------------------ //
+    const DEMO = `# Witaj w md-wysiwyg-editor — Etap 3
+
+To jest **edytor Markdown** z podglądem na żywo.
+
+## Tabela (kliknij komórkę → sync z kodem)
+
+| Cecha            | Status       | Etap |
+|------------------|--------------|------|
+| Split view       | ✅ gotowe    | 1    |
+| Sync linii       | ✅ gotowe    | 1    |
+| Obrazki / upload | ✅ gotowe    | 2    |
+| Resize obrazków  | ✅ gotowe    | 2    |
+| Tabele (dialog)  | ✅ gotowe    | 2    |
+| KaTeX math       | ✅ gotowe    | 2    |
+| Mermaid          | ✅ gotowe    | 2    |
+| draw.io          | ✅ gotowe   | 3    |
+| Diff modal       | ✅ gotowe   | 3    |
+| WYSIWYG beta     | ✅ gotowe   | 3    |
+
+## Math inline i blokowy
+
+Wzór inline: $E = mc^2$ i $\\sqrt{a^2 + b^2} = c$
+
+Wzór blokowy:
+
+$$
+\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}
+$$
+
+## Mermaid diagram
+
+\`\`\`mermaid
+graph TD
+    A[Markdown w repo] --> B{Commit}
+    B -->|CI/CD| C[Eleventy build]
+    C --> D[GitHub Pages]
+    B -->|Editor| E[Podgląd live]
+\`\`\`
+
+## draw.io diagram (kliknij Edit w preview)
+
+\`\`\`drawio
+<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>
+\`\`\`
+
+## Blok kodu (kliknij linię → sync z kodem)
+
+\`\`\`javascript
+function createEditor(element, options) {
+  return new EditorCore(element, options);
+}
+
+const editor = createEditor('#app', {
+  value: '# Hello',
+  upload: { endpoint: '/api/upload' },
+  onChange: (md, tokens) => console.log(tokens),
+});
+\`\`\`
+
+## Obrazki
+
+Wklej obrazek ze schowka (Ctrl+V) albo przeciągnij plik na edytor.
+Hover na obrazek w preview → pojawi się uchwyt resize (prawy dolny róg).
+
+![Przykład|320x180](https://picsum.photos/320/180)
+
+---
+
+Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej linii.
+`;
+
+    // ------------------------------------------------------------------ //
+    // Create editor
+    // ------------------------------------------------------------------ //
+    window.editor = createEditor('#editor-container', {
+      value: DEMO,
+      mode: 'split',
+
+      onChange(markdown, tokens, html) {
+        log(`onChange — ${markdown.length} znaków`);
+      },
+
+      onSelectionChange(sel) {
+        // Uncomment to debug: log(`selection L${sel.lineFrom}–L${sel.lineTo}`);
+      },
+
+      onPreviewClick(el, range) {
+        log(`previewClick → linia ${range.from}`);
+      },
+    });
+
+    // ------------------------------------------------------------------ //
+    // Control helpers (exposed on window for inline onclick)
+    // ------------------------------------------------------------------ //
+    window.logMd = () => {
+      const md = editor.getMarkdown();
+      log(`getMarkdown() → ${md.length} znaków`);
+      console.log(md);
+    };
+
+    window.doSet = () => {
+      editor.setMarkdown('# Nowa treść\n\nUstawiona przez `setMarkdown()` API.\n\n- pozycja 1\n- pozycja 2');
+      log('setMarkdown() wywołane');
+    };
+
+    window.doInsert = () => {
+      editor.insertText('\n\n> **Wstawiony** przez `insertText()` API.\n\n');
+      log('insertText() wywołane');
+    };
+
+    window.doPropose = () => {
+      editor.proposeChange('# Propozycja od chatbota\n\nTen tekst pochodzi z `proposeChange()` API.\n\nTo okno pokazuje teraz diff i wymaga akceptacji.\n');
+      log('proposeChange() wywołane');
+    };
+
+    let customRegistered = false;
+    window.doRegister = () => {
+      if (customRegistered) { log('Akcja już zarejestrowana'); return; }
+      customRegistered = true;
+      editor.registerAction({
+        id: 'star-wrap',
+        title: 'Dodaj gwiazdkę',
+        label: '⭐',
+        group: 'custom',
+        order: 200,
+        run(api, state) {
+          const text = state.selection?.text;
+          if (text) {
+            api.replaceSelection(`⭐ ${text} ⭐`);
+          } else {
+            api.insertText(' ⭐ ');
+          }
+        },
+      });
+      log('registerAction() — przycisk ⭐ dodany do toolbar');
+    };
+
+    const MODES = ['split', 'code', 'preview', 'wysiwyg'];
+    let modeIdx = 0;
+    window.toggleMode = () => {
+      modeIdx = (modeIdx + 1) % MODES.length;
+      editor.setMode(MODES[modeIdx]);
+      log(`setMode('${MODES[modeIdx]}')`);
+    };
+
+    let dark = false;
+    window.toggleTheme = () => {
+      dark = !dark;
+      editor._root.setAttribute('data-theme', dark ? 'dark' : 'light');
+      log(`theme → ${dark ? 'dark' : 'light'}`);
+    };
+
+    // ------------------------------------------------------------------ //
+    // Tiny log panel
+    // ------------------------------------------------------------------ //
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.style.display = 'block';
+      logEl.textContent = `${new Date().toLocaleTimeString()} ${msg}\n` + logEl.textContent;
+    }
+  </script>
+
+</body>
+</html>
