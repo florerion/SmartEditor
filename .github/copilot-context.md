@@ -30,6 +30,20 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Ensure classes that register listeners/timers clean them up in `destroy()`.
 - Keep plugin behavior in actions where possible (`registerAction` schema).
 
+## draw.io Snapshot (Current)
+- Markdown serialization for draw.io is now one-line only:
+  - `![draw.io](image-src){uri-encoded-xml}`
+- Legacy fenced draw.io blocks (` ```drawio `) are no longer supported.
+- Preview renders draw.io as a single clickable image (no frame/header/footer/edit button UI).
+- Clicking a draw.io image in preview opens modal edit for that diagram payload.
+- Toolbar draw.io action always starts from a fresh, blank diagram:
+  - `openDrawioEditor({ forceNew: true })`
+- Core files involved:
+  - `src/core/Parser.js`
+  - `src/core/EditorCore.js`
+  - `src/ui/DrawioModal.js`
+  - `src/plugins/drawio.js`
+
 ## Build And Validation
 - Install deps: `npm install`
 - Build: `npm run build`
@@ -52,5 +66,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-19
-- Reason: cross-account context transfer bootstrap
+- Date: 2026-03-20
+- Reason: refresh context after draw.io format/UX refactor (image+xml serialization, preview click-edit, force-new toolbar behavior)
