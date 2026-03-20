@@ -20,7 +20,7 @@ const STYLE_TAG_ID = 'mde-global-styles';
  *
  * Stage 3 additions:
  *  - `proposeChange` now opens accept/reject diff modal.
- *  - draw.io modal editor and preview "Edit" flow for ```drawio fenced blocks.
+ *  - draw.io modal editor and preview click-to-edit flow.
  *  - `wysiwyg` mode is a beta view preset (preview-first layout).
  */
 export class EditorCore {
@@ -151,25 +151,29 @@ export class EditorCore {
   }
 
   /**
-   * Open draw.io editor and upsert a ` ```drawio ` fenced block.
+   * Open draw.io editor and upsert a `![draw.io](image){xml}` line.
    *
    * @param {object} [opts]
    * @param {string} [opts.xml]   Initial XML (if omitted, uses block at cursor if present)
    * @param {number} [opts.line]  0-based source line to replace drawio block in place
+   * @param {boolean} [opts.forceNew=false]  When true, always start with a blank diagram and insert a new block
    * @returns {Promise<boolean>} true when applied, false when canceled
    */
   async openDrawioEditor(opts = {}) {
     const line = Number.isInteger(opts.line) ? opts.line : this.getSelection().lineFrom;
+    const forceNew = opts.forceNew === true;
     const lines = this.getMarkdown().split('\n');
-    const block = this._findDrawioBlockAtLine(lines, line);
+    const block = forceNew ? null : this._findDrawioBlockAtLine(lines, line);
     const currentXml = typeof opts.xml === 'string'
       ? opts.xml
-      : (block ? lines.slice(block.start + 1, block.end).join('\n') : '');
+      : (forceNew ? '' : this._extractDrawioXml(block));
 
-    const resultXml = await this._drawioModal.open(currentXml);
-    if (!resultXml) return false;
+    const result = await this._drawioModal.open(currentXml);
+    if (!result) return false;
 
-    this._upsertDrawioBlock(resultXml, block);
+    const resultXml = typeof result === 'string' ? result : result.xml;
+    const resultImage = typeof result === 'string' ? '' : result.imageSrc;
+    await this._upsertDrawioBlock(resultXml, resultImage, block);
     return true;
   }
 
@@ -291,15 +295,14 @@ export class EditorCore {
     );
 
     this._boundPreviewAction = async (event) => {
-      const editBtn = event.target.closest('[data-mde-drawio-edit]');
-      if (!editBtn) return;
+      const trigger = event.target.closest('[data-mde-drawio-open]');
+      if (!trigger) return;
 
       event.preventDefault();
       event.stopPropagation();
 
-      const host = editBtn.closest('.mde-drawio');
-      const xml = decodeURIComponent(host?.getAttribute('data-drawio') ?? '');
-      const line = parseInt(host?.getAttribute('data-source-line') ?? '-1', 10);
+      const xml = this._decodeDrawioPayload(trigger.getAttribute('data-drawio') ?? '');
+      const line = parseInt(trigger.getAttribute('data-source-line') ?? '-1', 10);
 
       await this.openDrawioEditor({ xml, line: Number.isNaN(line) ? undefined : line });
     };
@@ -391,38 +394,57 @@ export class EditorCore {
   // Private — draw.io markdown update
   // ============================================================
 
-  _upsertDrawioBlock(xml, existingBlock) {
-    const fenced = ['```drawio', xml.trim(), '```'].join('\n');
+  async _upsertDrawioBlock(xml, imageSrc, existingBlock) {
+    const normalizedXml = xml.trim();
+    const safeImageSrc = imageSrc || existingBlock?.src || _defaultDrawioImage();
+    const lineValue = this._buildDrawioMarkdownLine(safeImageSrc, normalizedXml);
 
     if (existingBlock) {
       const lines = this.getMarkdown().split('\n');
-      const newLines = [
-        ...lines.slice(0, existingBlock.start),
-        ...fenced.split('\n'),
-        ...lines.slice(existingBlock.end + 1),
-      ];
+      const newLines = [...lines];
+      newLines.splice(existingBlock.start, existingBlock.end - existingBlock.start + 1, lineValue);
       this.setMarkdown(newLines.join('\n'));
       this._codePanel.scrollToLine(existingBlock.start);
       return;
     }
 
-    this.insertText(`\n${fenced}\n`);
+    this.insertText(`\n${lineValue}\n`);
   }
 
   _findDrawioBlockAtLine(lines, line0) {
     for (let i = 0; i < lines.length; i++) {
-      if (!/^```drawio\b/.test(lines[i].trim())) continue;
-
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() !== '```') j++;
-      if (j >= lines.length) break;
-
-      if (line0 >= i && line0 <= j) {
-        return { start: i, end: j };
+      const parsed = this._parseDrawioImageLine(lines[i]);
+      if (parsed && line0 === i) {
+        return { start: i, end: i, payload: parsed.payload, src: parsed.src };
       }
-      i = j;
     }
     return null;
+  }
+
+  _extractDrawioXml(block) {
+    if (!block) return '';
+    return this._decodeDrawioPayload(block.payload);
+  }
+
+  _buildDrawioMarkdownLine(imageSrc, xml) {
+    return `![draw.io](${imageSrc}){${encodeURIComponent(xml)}}`;
+  }
+
+  _parseDrawioImageLine(line) {
+    const match = line.trim().match(/^!\[draw\.io\]\((.*)\)\{([\s\S]*)\}$/);
+    if (!match) return null;
+    const src = match[1].trim();
+    const payload = match[2].trim();
+    if (!src || !payload) return null;
+    return { src, payload };
+  }
+
+  _decodeDrawioPayload(payload) {
+    try {
+      return decodeURIComponent(payload);
+    } catch {
+      return payload;
+    }
   }
 
   // ============================================================
@@ -499,4 +521,12 @@ export class EditorCore {
       focus: () => this.focus(),
     };
   }
+}
+
+function _defaultDrawioImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef6ff"/><rect x="24" y="24" width="592" height="172" rx="12" fill="#ffffff" stroke="#93c5fd"/><text x="320" y="118" text-anchor="middle" font-family="Arial" font-size="28" fill="#1d4ed8">draw.io diagram</text></svg>';
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
 }

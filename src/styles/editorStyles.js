@@ -471,38 +471,14 @@ export const EDITOR_STYLES = `
    Stage 3: draw.io preview block
    ============================================================ */
 .mde-drawio {
-  border: 1px solid var(--mde-color-border, #d0d7de);
-  border-radius: 8px;
-  background: var(--mde-color-code-bg, #f8fafc);
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
   margin: 0.75em 0;
-  overflow: hidden;
-}
-
-.mde-drawio__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--mde-color-border, #d0d7de);
-  background: rgba(59,130,246,.06);
-}
-
-.mde-drawio__edit {
-  border: 1px solid #3b82f6;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-radius: 5px;
-  font-size: 12px;
-  padding: 3px 10px;
   cursor: pointer;
-}
-
-.mde-drawio__fallback {
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
 }
 
 /* ============================================================

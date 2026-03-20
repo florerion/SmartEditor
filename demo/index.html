@@ -90,6 +90,9 @@
     // ------------------------------------------------------------------ //
     // Initial content
     // ------------------------------------------------------------------ //
+    const DEMO_DRAWIO_XML = '<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+    const DEMO_DRAWIO_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgNjQwIDIyMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIyMjAiIHJ4PSIxNiIgZmlsbD0iI2VlZjZmZiIvPjxyZWN0IHg9IjI0IiB5PSIyNCIgd2lkdGg9IjU5MiIgaGVpZ2h0PSIxNzIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOTNjNWZkIi8+PHRleHQgeD0iMzIwIiB5PSIxMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzFkNGVkOCI+ZHJhdy5pbyBkZW1vPC90ZXh0Pjwvc3ZnPg==';
+
     const DEMO = `# Witaj w md-wysiwyg-editor — Etap 3
 
 To jest **edytor Markdown** z podglądem na żywo.
@@ -129,11 +132,9 @@ graph TD
     B -->|Editor| E[Podgląd live]
 \`\`\`
 
-## draw.io diagram (kliknij Edit w preview)
+## draw.io diagram (kliknij obraz lub Edit w preview)
 
-\`\`\`drawio
-<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>
-\`\`\`
+![draw.io](${DEMO_DRAWIO_IMAGE}){${encodeURIComponent(DEMO_DRAWIO_XML)}}
 
 ## Blok kodu (kliknij linię → sync z kodem)
 

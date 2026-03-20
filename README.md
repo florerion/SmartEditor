@@ -162,7 +162,7 @@ Returned editor instance (or `<md-editor>` proxies) provides:
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
 | `runCommand` | `(id, args?)` | Run action by id programmatically. |
-| `openDrawioEditor` | `(opts?) => Promise<boolean>` | Open draw.io modal and insert/update fenced block. |
+| `openDrawioEditor` | `(opts?) => Promise<boolean>` | Open draw.io modal and insert/update `![draw.io](image){xml}` block line. |
 | `proposeChange` | `(newMarkdown) => Promise<boolean>` | Open diff modal and apply if accepted. |
 | `destroy` | `()` | Dispose editor instance and listeners. |
 
@@ -262,7 +262,7 @@ The editor auto-registers built-in toolbar actions grouped by intent.
 
 - Source line mapping attributes for code-preview sync.
 - Table cell source-column metadata.
-- Fenced `drawio` block rendering with edit button.
+- `draw.io` image block rendering from `![draw.io](image){xml}` with click-to-edit in preview.
 - Fenced `mermaid` block placeholders rendered with Mermaid (if present).
 - Inline/block math placeholders rendered with KaTeX post-processing.
 - Image alt resize syntax: `![alt|320x180](url)` -> `<img width="320" height="180">`.
@@ -338,8 +338,27 @@ The editor is designed to keep markdown output compatible with markdown-it based
 
 - Core parser is markdown-it with configurable options/plugins.
 - Generated markdown remains plain markdown text.
-- draw.io and Mermaid integrations are represented as fenced blocks.
+- Mermaid integration is represented as fenced blocks.
+- draw.io integration is represented as `![draw.io](image){xml}` lines.
 - Image resizing metadata is encoded in alt text using `|WxH` suffix.
+
+## draw.io Markdown Format
+
+draw.io diagrams are serialized as one markdown line:
+
+```md
+![draw.io](<image-src>){<uri-encoded-xml>}
+```
+
+- `<image-src>` is typically a `data:image/svg+xml;base64,...` preview image.
+- `<uri-encoded-xml>` is diagram XML encoded with `encodeURIComponent`.
+- In preview, clicking the image or the `Edit diagram` button opens draw.io modal and preserves XML.
+
+### Example
+
+```md
+![draw.io](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iLi4uIj48L3N2Zz4=){%3Cmxfile%20host%3D%22app.diagrams.net%22%3E%3Cdiagram%20id%3D%22d1%22%20name%3D%22Page-1%22%3E%3CmxGraphModel%3E%3Croot%3E%3CmxCell%20id%3D%220%22%2F%3E%3CmxCell%20id%3D%221%22%20parent%3D%220%22%2F%3E%3C%2Froot%3E%3C%2FmxGraphModel%3E%3C%2Fdiagram%3E%3C%2Fmxfile%3E}
+```
 
 ## Security Notes
 
@@ -364,13 +383,13 @@ Use this section as a compatibility reference when upgrading the editor in host 
 - Runtime API includes document ops, selection ops, mode switching, action registration, draw.io modal, and diff-based `proposeChange`.
 - Core options include markdown-it configuration, upload configuration, draw.io URL override, and integration callbacks.
 - Built-in action groups include inline formatting, blocks, lists, links/images, table/mermaid/draw.io, and image upload.
-- Parser support includes source-line mapping, table cell metadata, Mermaid/KaTeX placeholders, draw.io fenced blocks, and image dimension syntax (`|WxH`).
+- Parser support includes source-line mapping, table cell metadata, Mermaid/KaTeX placeholders, draw.io image+xml blocks, and image dimension syntax (`|WxH`).
 
 ### Upgrade Notes
 
 - Treat any removal or signature change in methods listed under `Runtime API` as breaking.
 - Treat callback signature changes in `Configuration Options` as breaking.
-- Treat changes to markdown serialization conventions (`drawio` fenced blocks, image `|WxH`) as breaking for downstream pipelines.
+- Treat changes to markdown serialization conventions (`draw.io` image+xml block, image `|WxH`) as breaking for downstream pipelines.
 - Prefer additive changes for custom action integrations: add new action IDs instead of mutating existing IDs used by host automation.
 
 ## Development Commands

@@ -14,17 +14,19 @@ export class DrawioModal {
     this._boundMsg = this._onMessage.bind(this);
     this._boundKey = this._onKey.bind(this);
     this._pendingXml = '';
+    this._pendingSaveXml = '';
   }
 
   /**
    * Open draw.io editor.
    * @param {string} initialXml
-   * @returns {Promise<string|null>} xml on save, null on cancel
+    * @returns {Promise<{ xml: string, imageSrc: string }|null>} saved payload or null on cancel
    */
   open(initialXml = '') {
     this.close(null);
 
     this._pendingXml = initialXml || _defaultDiagramXml();
+  this._pendingSaveXml = '';
 
     this._overlay = document.createElement('div');
     this._overlay.className = 'mde-drawio-overlay';
@@ -59,7 +61,7 @@ export class DrawioModal {
     });
   }
 
-  /** @param {string|null} result */
+  /** @param {{ xml: string, imageSrc: string }|null} result */
   close(result) {
     if (this._overlay) {
       this._overlay.remove();
@@ -99,18 +101,19 @@ export class DrawioModal {
     }
 
     if (msg.event === 'save') {
-      // draw.io can send xml directly in save event.
-      if (typeof msg.xml === 'string' && msg.xml.length) {
-        this.close(msg.xml);
-        return;
-      }
-      // Ask explicitly for XML export if xml wasn't included.
-      this._post({ action: 'export', format: 'xml', xml: 1, spin: 'Saving...' });
+      this._pendingSaveXml = (typeof msg.xml === 'string' && msg.xml.length)
+        ? msg.xml
+        : this._pendingXml;
+
+      // Ask draw.io for a rendered SVG so markdown can store a base64 image.
+      this._post({ action: 'export', format: 'svg', xml: 1, base64: 1, spin: 'Saving...' });
       return;
     }
 
     if (msg.event === 'export' && typeof msg.data === 'string') {
-      this.close(msg.data);
+      const xml = this._pendingSaveXml || this._pendingXml;
+      const imageSrc = this._normalizeExportData(msg.data);
+      this.close({ xml, imageSrc });
       return;
     }
 
@@ -122,8 +125,36 @@ export class DrawioModal {
   _post(payload) {
     this._iframe?.contentWindow?.postMessage(JSON.stringify(payload), '*');
   }
+
+  _normalizeExportData(data) {
+    const value = data.trim();
+    if (value.startsWith('data:image/')) return value;
+    if (value.startsWith('<svg')) {
+      return `data:image/svg+xml;base64,${this._toBase64(value)}`;
+    }
+    if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.includes('PHN2Zy')) {
+      return `data:image/svg+xml;base64,${value.replace(/\s+/g, '')}`;
+    }
+    // Safe fallback that still satisfies image markdown semantics.
+    return _fallbackDrawioImage();
+  }
+
+  _toBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
 }
 
 function _defaultDiagramXml() {
   return '<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+}
+
+function _fallbackDrawioImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef6ff"/><rect x="24" y="24" width="592" height="172" rx="12" fill="#ffffff" stroke="#93c5fd"/><text x="320" y="118" text-anchor="middle" font-family="Arial" font-size="28" fill="#1d4ed8">draw.io diagram</text></svg>';
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
 }
