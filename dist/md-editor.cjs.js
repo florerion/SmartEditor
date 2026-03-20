@@ -17764,7 +17764,7 @@ function replaceUnsafeChar (ch) {
   return HTML_REPLACEMENTS[ch]
 }
 
-function escapeHtml$1 (str) {
+function escapeHtml (str) {
   if (HTML_ESCAPE_TEST_RE.test(str)) {
     return str.replace(HTML_ESCAPE_REPLACE_RE, replaceUnsafeChar)
   }
@@ -17922,7 +17922,7 @@ var utils = /*#__PURE__*/Object.freeze({
   __proto__: null,
   arrayReplaceAt: arrayReplaceAt,
   assign: assign$1,
-  escapeHtml: escapeHtml$1,
+  escapeHtml: escapeHtml,
   escapeRE: escapeRE$1,
   fromCodePoint: fromCodePoint,
   has: has,
@@ -18155,7 +18155,7 @@ default_rules.code_inline = function (tokens, idx, options, env, slf) {
   const token = tokens[idx];
 
   return  '<code' + slf.renderAttrs(token) + '>' +
-          escapeHtml$1(token.content) +
+          escapeHtml(token.content) +
           '</code>'
 };
 
@@ -18163,7 +18163,7 @@ default_rules.code_block = function (tokens, idx, options, env, slf) {
   const token = tokens[idx];
 
   return  '<pre' + slf.renderAttrs(token) + '><code>' +
-          escapeHtml$1(tokens[idx].content) +
+          escapeHtml(tokens[idx].content) +
           '</code></pre>\n'
 };
 
@@ -18181,9 +18181,9 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
 
   let highlighted;
   if (options.highlight) {
-    highlighted = options.highlight(token.content, langName, langAttrs) || escapeHtml$1(token.content);
+    highlighted = options.highlight(token.content, langName, langAttrs) || escapeHtml(token.content);
   } else {
-    highlighted = escapeHtml$1(token.content);
+    highlighted = escapeHtml(token.content);
   }
 
   if (highlighted.indexOf('<pre') === 0) {
@@ -18237,7 +18237,7 @@ default_rules.softbreak = function (tokens, idx, options /*, env */) {
 };
 
 default_rules.text = function (tokens, idx /*, options, env */) {
-  return escapeHtml$1(tokens[idx].content)
+  return escapeHtml(tokens[idx].content)
 };
 
 default_rules.html_block = function (tokens, idx /*, options, env */) {
@@ -18297,7 +18297,7 @@ Renderer.prototype.renderAttrs = function renderAttrs (token) {
   result = '';
 
   for (i = 0, l = token.attrs.length; i < l; i++) {
-    result += ' ' + escapeHtml$1(token.attrs[i][0]) + '="' + escapeHtml$1(token.attrs[i][1]) + '"';
+    result += ' ' + escapeHtml(token.attrs[i][0]) + '="' + escapeHtml(token.attrs[i][1]) + '"';
   }
 
   return result
@@ -24902,11 +24902,6 @@ MarkdownIt.prototype.renderInline = function (src, env) {
   return this.renderer.render(this.parseInline(src, env), this.options, env)
 };
 
-var index = /*#__PURE__*/Object.freeze({
-  __proto__: null,
-  default: MarkdownIt
-});
-
 /**
  * Wraps markdown-it and extends it with:
  *  - Source-map attributes (`data-source-line`, `data-source-line-end`) on every
@@ -24945,6 +24940,7 @@ let Parser$1 = class Parser {
     });
 
     this._addMathRules();
+    this._addDrawioRules();
     this._patchRenderers();
   }
 
@@ -25051,6 +25047,40 @@ let Parser$1 = class Parser {
   }
 
   // ------------------------------------------------------------
+  // draw.io markdown block rule: ![draw.io](image-src){xml-or-uri-encoded-xml}
+  // ------------------------------------------------------------
+  _addDrawioRules() {
+    const md = this._md;
+
+    md.block.ruler.before('paragraph', 'drawio_image_block', (state, startLine, endLine, silent) => {
+      const startPos = state.bMarks[startLine] + state.tShift[startLine];
+      const lineText = state.src.slice(startPos, state.eMarks[startLine]).trim();
+      const parsed = this._parseDrawioImageLine(lineText);
+      if (!parsed) return false;
+      if (silent) return true;
+
+      const token = state.push('drawio_image_block', 'div', 0);
+      token.block = true;
+      token.attrSet('data-drawio-src', parsed.src);
+      token.content = parsed.payload;
+      token.map = [startLine, startLine + 1];
+      state.line = startLine + 1;
+      return true;
+    });
+
+    md.renderer.rules.drawio_image_block = (tokens, idx) => {
+      const token = tokens[idx];
+      const imageSrc = token.attrGet('data-drawio-src') ?? '';
+      const encodedPayload = token.content;
+      const lineAttrs = token.map
+        ? ` data-source-line="${token.map[0]}" data-source-line-end="${token.map[1] - 1}"`
+        : '';
+
+      return `<img class="mde-drawio" data-mde-drawio-open data-drawio="${this._escAtt(encodedPayload)}"${lineAttrs} src="${this._escAtt(imageSrc)}" alt="draw.io diagram" loading="lazy">\n`;
+    };
+  }
+
+  // ------------------------------------------------------------
   // All other renderer patches
   // ------------------------------------------------------------
   _patchRenderers() {
@@ -25131,7 +25161,7 @@ let Parser$1 = class Parser {
       return `<img ${attrs}>`;
     };
 
-    // ---- fence: drawio / mermaid special blocks; others → per-line spans ----
+    // ---- fence: mermaid special blocks; others → per-line spans ----
     md.renderer.rules.fence = (tokens, idx, options, env, self) => {
       const token    = tokens[idx];
       const langName = (token.info || '').trim().split(/\s+/)[0];
@@ -25141,23 +25171,6 @@ let Parser$1 = class Parser {
       if (srcLine >= 0) {
         token.attrSet('data-source-line',     String(srcLine));
         token.attrSet('data-source-line-end', String(srcEnd));
-      }
-
-      // --- draw.io XML block ---
-      if (langName === 'drawio') {
-        const lineAttrs = srcLine >= 0
-          ? ` data-source-line="${srcLine}" data-source-line-end="${srcEnd}"`
-          : '';
-        const encoded = encodeURIComponent(token.content);
-        return (
-          `<div class="mde-drawio"${lineAttrs} data-drawio="${encoded}">` +
-          `<div class="mde-drawio__header">` +
-          `<strong>draw.io diagram</strong>` +
-          `<button type="button" class="mde-drawio__edit" data-mde-drawio-edit>Edit</button>` +
-          `</div>` +
-          `<pre class="mde-drawio__fallback"><code>${this._esc(token.content)}</code></pre>` +
-          `</div>\n`
-        );
       }
 
       // --- Mermaid ---
@@ -25204,6 +25217,17 @@ let Parser$1 = class Parser {
 
   _escAtt(str) {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  _parseDrawioImageLine(line) {
+    const match = line.match(/^!\[draw\.io\]\((.*)\)\{([\s\S]*)\}$/);
+    if (!match) return null;
+
+    const src = match[1].trim();
+    const payload = match[2].trim();
+    if (!src || !payload) return null;
+
+    return { src, payload };
   }
 };
 
@@ -55415,17 +55439,19 @@ class DrawioModal {
     this._boundMsg = this._onMessage.bind(this);
     this._boundKey = this._onKey.bind(this);
     this._pendingXml = '';
+    this._pendingSaveXml = '';
   }
 
   /**
    * Open draw.io editor.
    * @param {string} initialXml
-   * @returns {Promise<string|null>} xml on save, null on cancel
+    * @returns {Promise<{ xml: string, imageSrc: string }|null>} saved payload or null on cancel
    */
   open(initialXml = '') {
     this.close(null);
 
     this._pendingXml = initialXml || _defaultDiagramXml();
+  this._pendingSaveXml = '';
 
     this._overlay = document.createElement('div');
     this._overlay.className = 'mde-drawio-overlay';
@@ -55460,7 +55486,7 @@ class DrawioModal {
     });
   }
 
-  /** @param {string|null} result */
+  /** @param {{ xml: string, imageSrc: string }|null} result */
   close(result) {
     if (this._overlay) {
       this._overlay.remove();
@@ -55500,18 +55526,19 @@ class DrawioModal {
     }
 
     if (msg.event === 'save') {
-      // draw.io can send xml directly in save event.
-      if (typeof msg.xml === 'string' && msg.xml.length) {
-        this.close(msg.xml);
-        return;
-      }
-      // Ask explicitly for XML export if xml wasn't included.
-      this._post({ action: 'export', format: 'xml', xml: 1, spin: 'Saving...' });
+      this._pendingSaveXml = (typeof msg.xml === 'string' && msg.xml.length)
+        ? msg.xml
+        : this._pendingXml;
+
+      // Ask draw.io for a rendered SVG so markdown can store a base64 image.
+      this._post({ action: 'export', format: 'svg', xml: 1, base64: 1, spin: 'Saving...' });
       return;
     }
 
     if (msg.event === 'export' && typeof msg.data === 'string') {
-      this.close(msg.data);
+      const xml = this._pendingSaveXml || this._pendingXml;
+      const imageSrc = this._normalizeExportData(msg.data);
+      this.close({ xml, imageSrc });
       return;
     }
 
@@ -55523,10 +55550,38 @@ class DrawioModal {
   _post(payload) {
     this._iframe?.contentWindow?.postMessage(JSON.stringify(payload), '*');
   }
+
+  _normalizeExportData(data) {
+    const value = data.trim();
+    if (value.startsWith('data:image/')) return value;
+    if (value.startsWith('<svg')) {
+      return `data:image/svg+xml;base64,${this._toBase64(value)}`;
+    }
+    if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.includes('PHN2Zy')) {
+      return `data:image/svg+xml;base64,${value.replace(/\s+/g, '')}`;
+    }
+    // Safe fallback that still satisfies image markdown semantics.
+    return _fallbackDrawioImage();
+  }
+
+  _toBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
 }
 
 function _defaultDiagramXml() {
   return '<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+}
+
+function _fallbackDrawioImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef6ff"/><rect x="24" y="24" width="592" height="172" rx="12" fill="#ffffff" stroke="#93c5fd"/><text x="320" y="118" text-anchor="middle" font-family="Arial" font-size="28" fill="#1d4ed8">draw.io diagram</text></svg>';
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
 }
 
 /**
@@ -56002,38 +56057,14 @@ const EDITOR_STYLES = `
    Stage 3: draw.io preview block
    ============================================================ */
 .mde-drawio {
-  border: 1px solid var(--mde-color-border, #d0d7de);
-  border-radius: 8px;
-  background: var(--mde-color-code-bg, #f8fafc);
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
   margin: 0.75em 0;
-  overflow: hidden;
-}
-
-.mde-drawio__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--mde-color-border, #d0d7de);
-  background: rgba(59,130,246,.06);
-}
-
-.mde-drawio__edit {
-  border: 1px solid #3b82f6;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-radius: 5px;
-  font-size: 12px;
-  padding: 3px 10px;
   cursor: pointer;
-}
-
-.mde-drawio__fallback {
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
 }
 
 /* ============================================================
@@ -56471,7 +56502,7 @@ const drawioAction = {
   order: 47,
   icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="9" y="15" width="6" height="6"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="18" y1="9" x2="12" y2="15"/></svg>`,
   async run(api) {
-    await api.openDrawioEditor();
+    await api.openDrawioEditor({ forceNew: true });
   },
 };
 
@@ -56658,7 +56689,7 @@ const STYLE_TAG_ID = 'mde-global-styles';
  *
  * Stage 3 additions:
  *  - `proposeChange` now opens accept/reject diff modal.
- *  - draw.io modal editor and preview "Edit" flow for ```drawio fenced blocks.
+ *  - draw.io modal editor and preview click-to-edit flow.
  *  - `wysiwyg` mode is a beta view preset (preview-first layout).
  */
 class EditorCore {
@@ -56789,25 +56820,29 @@ class EditorCore {
   }
 
   /**
-   * Open draw.io editor and upsert a ` ```drawio ` fenced block.
+   * Open draw.io editor and upsert a `![draw.io](image){xml}` line.
    *
    * @param {object} [opts]
    * @param {string} [opts.xml]   Initial XML (if omitted, uses block at cursor if present)
    * @param {number} [opts.line]  0-based source line to replace drawio block in place
+   * @param {boolean} [opts.forceNew=false]  When true, always start with a blank diagram and insert a new block
    * @returns {Promise<boolean>} true when applied, false when canceled
    */
   async openDrawioEditor(opts = {}) {
     const line = Number.isInteger(opts.line) ? opts.line : this.getSelection().lineFrom;
+    const forceNew = opts.forceNew === true;
     const lines = this.getMarkdown().split('\n');
-    const block = this._findDrawioBlockAtLine(lines, line);
+    const block = forceNew ? null : this._findDrawioBlockAtLine(lines, line);
     const currentXml = typeof opts.xml === 'string'
       ? opts.xml
-      : (block ? lines.slice(block.start + 1, block.end).join('\n') : '');
+      : (forceNew ? '' : this._extractDrawioXml(block));
 
-    const resultXml = await this._drawioModal.open(currentXml);
-    if (!resultXml) return false;
+    const result = await this._drawioModal.open(currentXml);
+    if (!result) return false;
 
-    this._upsertDrawioBlock(resultXml, block);
+    const resultXml = typeof result === 'string' ? result : result.xml;
+    const resultImage = typeof result === 'string' ? '' : result.imageSrc;
+    await this._upsertDrawioBlock(resultXml, resultImage, block);
     return true;
   }
 
@@ -56929,15 +56964,14 @@ class EditorCore {
     );
 
     this._boundPreviewAction = async (event) => {
-      const editBtn = event.target.closest('[data-mde-drawio-edit]');
-      if (!editBtn) return;
+      const trigger = event.target.closest('[data-mde-drawio-open]');
+      if (!trigger) return;
 
       event.preventDefault();
       event.stopPropagation();
 
-      const host = editBtn.closest('.mde-drawio');
-      const xml = decodeURIComponent(host?.getAttribute('data-drawio') ?? '');
-      const line = parseInt(host?.getAttribute('data-source-line') ?? '-1', 10);
+      const xml = this._decodeDrawioPayload(trigger.getAttribute('data-drawio') ?? '');
+      const line = parseInt(trigger.getAttribute('data-source-line') ?? '-1', 10);
 
       await this.openDrawioEditor({ xml, line: Number.isNaN(line) ? undefined : line });
     };
@@ -57029,38 +57063,57 @@ class EditorCore {
   // Private — draw.io markdown update
   // ============================================================
 
-  _upsertDrawioBlock(xml, existingBlock) {
-    const fenced = ['```drawio', xml.trim(), '```'].join('\n');
+  async _upsertDrawioBlock(xml, imageSrc, existingBlock) {
+    const normalizedXml = xml.trim();
+    const safeImageSrc = imageSrc || existingBlock?.src || _defaultDrawioImage();
+    const lineValue = this._buildDrawioMarkdownLine(safeImageSrc, normalizedXml);
 
     if (existingBlock) {
       const lines = this.getMarkdown().split('\n');
-      const newLines = [
-        ...lines.slice(0, existingBlock.start),
-        ...fenced.split('\n'),
-        ...lines.slice(existingBlock.end + 1),
-      ];
+      const newLines = [...lines];
+      newLines.splice(existingBlock.start, existingBlock.end - existingBlock.start + 1, lineValue);
       this.setMarkdown(newLines.join('\n'));
       this._codePanel.scrollToLine(existingBlock.start);
       return;
     }
 
-    this.insertText(`\n${fenced}\n`);
+    this.insertText(`\n${lineValue}\n`);
   }
 
   _findDrawioBlockAtLine(lines, line0) {
     for (let i = 0; i < lines.length; i++) {
-      if (!/^```drawio\b/.test(lines[i].trim())) continue;
-
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() !== '```') j++;
-      if (j >= lines.length) break;
-
-      if (line0 >= i && line0 <= j) {
-        return { start: i, end: j };
+      const parsed = this._parseDrawioImageLine(lines[i]);
+      if (parsed && line0 === i) {
+        return { start: i, end: i, payload: parsed.payload, src: parsed.src };
       }
-      i = j;
     }
     return null;
+  }
+
+  _extractDrawioXml(block) {
+    if (!block) return '';
+    return this._decodeDrawioPayload(block.payload);
+  }
+
+  _buildDrawioMarkdownLine(imageSrc, xml) {
+    return `![draw.io](${imageSrc}){${encodeURIComponent(xml)}}`;
+  }
+
+  _parseDrawioImageLine(line) {
+    const match = line.trim().match(/^!\[draw\.io\]\((.*)\)\{([\s\S]*)\}$/);
+    if (!match) return null;
+    const src = match[1].trim();
+    const payload = match[2].trim();
+    if (!src || !payload) return null;
+    return { src, payload };
+  }
+
+  _decodeDrawioPayload(payload) {
+    try {
+      return decodeURIComponent(payload);
+    } catch {
+      return payload;
+    }
   }
 
   // ============================================================
@@ -57137,6 +57190,14 @@ class EditorCore {
       focus: () => this.focus(),
     };
   }
+}
+
+function _defaultDrawioImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef6ff"/><rect x="24" y="24" width="592" height="172" rx="12" fill="#ffffff" stroke="#93c5fd"/><text x="320" y="118" text-anchor="middle" font-family="Arial" font-size="28" fill="#1d4ed8">draw.io diagram</text></svg>';
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
 }
 
 /**
@@ -57243,299 +57304,6 @@ if (!customElements.get('md-editor')) {
 }
 
 /**
- * markdown-it plugin: parse image dimensions from alt text suffix.
- *
- * Input markdown:
- *   ![My image|320x180](https://example.com/a.png)
- *
- * Output HTML:
- *   <img src="..." alt="My image" width="320" height="180" class="mde-image">
- *
- * @param {import('markdown-it')} md markdown-it instance
- * @example
- * import MarkdownIt from 'markdown-it';
- * import { markdownItImageDimensionsPlugin } from 'md-wysiwyg-editor';
- *
- * const md = new MarkdownIt({ html: true });
- * md.use(markdownItImageDimensionsPlugin);
- */
-function markdownItImageDimensionsPlugin(md) {
-  md.renderer.rules.image || ((tokens, idx, options, env, self) =>
-    self.renderToken(tokens, idx, options)
-  );
-
-  md.renderer.rules.image = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const src = token.attrGet('src') ?? '';
-    const title = token.attrGet('title');
-
-    let alt = self.renderInlineAsText(token.children, options, env);
-    let width = null;
-    let height = null;
-
-    const match = alt.match(/^([\s\S]*)\|(\d+)x(\d+)$/);
-    if (match) {
-      alt = match[1];
-      width = match[2];
-      height = match[3];
-    }
-
-    let attrs = `src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" class="mde-image"`;
-    if (title) attrs += ` title="${escapeAttr(title)}"`;
-    if (width) attrs += ` width="${width}"`;
-    if (height) attrs += ` height="${height}"`;
-
-    return `<img ${attrs}>`;
-  };
-}
-
-/**
- * markdown-it plugin: render mermaid fenced blocks as a declarative wrapper
- * consumed by the editor preview and optional client-side mermaid runtime.
- *
- * @param {import('markdown-it')} md markdown-it instance
- * @example
- * import MarkdownIt from 'markdown-it';
- * import { markdownItMermaidPlugin } from 'md-wysiwyg-editor';
- *
- * const md = new MarkdownIt({ html: true });
- * md.use(markdownItMermaidPlugin);
- */
-function markdownItMermaidPlugin(md) {
-  const defaultFence = md.renderer.rules.fence || ((tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const langName = (token.info || '').trim().split(/\s+/)[0];
-    const langClass = langName ? ` class="language-${escapeHtml(langName)}"` : '';
-    const attrs = self.renderAttrs(token);
-    return `<pre${attrs}><code${langClass}>${escapeHtml(token.content)}</code></pre>\n`;
-  });
-
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const langName = (token.info || '').trim().split(/\s+/)[0];
-
-    if (langName === 'mermaid') {
-      const encoded = encodeURIComponent(token.content);
-      return (
-        `<div class="mde-mermaid" data-code="${encoded}">` +
-        `<pre class="mde-mermaid__fallback"><code>${escapeHtml(token.content)}</code></pre>` +
-        `</div>\n`
-      );
-    }
-
-    return defaultFence(tokens, idx, options, env, self);
-  };
-}
-
-/**
- * markdown-it plugin: render draw.io fenced blocks with an editable wrapper.
- *
- * @param {import('markdown-it')} md markdown-it instance
- * @example
- * import MarkdownIt from 'markdown-it';
- * import { markdownItDrawioPlugin } from 'md-wysiwyg-editor';
- *
- * const md = new MarkdownIt({ html: true });
- * md.use(markdownItDrawioPlugin);
- */
-function markdownItDrawioPlugin(md) {
-  const defaultFence = md.renderer.rules.fence || ((tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const langName = (token.info || '').trim().split(/\s+/)[0];
-    const langClass = langName ? ` class="language-${escapeHtml(langName)}"` : '';
-    const attrs = self.renderAttrs(token);
-    return `<pre${attrs}><code${langClass}>${escapeHtml(token.content)}</code></pre>\n`;
-  });
-
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const langName = (token.info || '').trim().split(/\s+/)[0];
-
-    if (langName === 'drawio') {
-      const encoded = encodeURIComponent(token.content);
-      return (
-        `<div class="mde-drawio" data-drawio="${encoded}">` +
-        `<div class="mde-drawio__header">` +
-        `<strong>draw.io diagram</strong>` +
-        `<button type="button" class="mde-drawio__edit" data-mde-drawio-edit>Edit</button>` +
-        `</div>` +
-        `<pre class="mde-drawio__fallback"><code>${escapeHtml(token.content)}</code></pre>` +
-        `</div>\n`
-      );
-    }
-
-    return defaultFence(tokens, idx, options, env, self);
-  };
-}
-
-/**
- * markdown-it plugin: support inline `$...$` and block `$$...$$` math markers.
- *
- * This plugin only produces semantic placeholders:
- * - `<span class="mde-math-inline" data-tex="...">`
- * - `<div class="mde-math-block" data-tex="...">`
- *
- * Render those nodes with KaTeX client-side or in a server transform.
- *
- * @param {import('markdown-it')} md markdown-it instance
- * @example
- * import MarkdownIt from 'markdown-it';
- * import { markdownItMathPlugin } from 'md-wysiwyg-editor';
- *
- * const md = new MarkdownIt({ html: true });
- * md.use(markdownItMathPlugin);
- */
-function markdownItMathPlugin(md) {
-  md.block.ruler.before('fence', 'math_block', (state, startLine, endLine, silent) => {
-    const startPos = state.bMarks[startLine] + state.tShift[startLine];
-    const lineText = state.src.slice(startPos, state.eMarks[startLine]).trim();
-    if (lineText !== '$$') return false;
-    if (silent) return true;
-
-    let nextLine = startLine + 1;
-    let found = false;
-    while (nextLine < endLine) {
-      const pos = state.bMarks[nextLine] + state.tShift[nextLine];
-      if (state.src.slice(pos, state.eMarks[nextLine]).trim() === '$$') {
-        found = true;
-        break;
-      }
-      nextLine++;
-    }
-    if (!found) return false;
-
-    const token = state.push('math_block', 'div', 0);
-    token.block = true;
-    token.content = state.getLines(startLine + 1, nextLine, 0, true).trim();
-    token.map = [startLine, nextLine + 1];
-    token.markup = '$$';
-    state.line = nextLine + 1;
-    return true;
-  });
-
-  md.inline.ruler.before('escape', 'math_inline', (state, silent) => {
-    const src = state.src;
-    const pos = state.pos;
-    if (src.charCodeAt(pos) !== 0x24) return false;
-
-    const start = pos + 1;
-    if (start >= state.posMax) return false;
-    if (src.charCodeAt(start) === 0x24) return false;
-
-    let end = start;
-    while (end <= state.posMax) {
-      const ch = src.charCodeAt(end);
-      if (ch === 0x24) break;
-      if (ch === 0x0a) return false;
-      end++;
-    }
-    if (end > state.posMax || end === start) return false;
-
-    if (!silent) {
-      const token = state.push('math_inline', 'span', 0);
-      token.markup = '$';
-      token.content = src.slice(start, end);
-    }
-    state.pos = end + 1;
-    return true;
-  });
-
-  md.renderer.rules.math_block = (tokens, idx) => {
-    const token = tokens[idx];
-    return `<div class="mde-math-block" data-tex="${encodeURIComponent(token.content)}"></div>\n`;
-  };
-
-  md.renderer.rules.math_inline = (tokens, idx) => {
-    const token = tokens[idx];
-    return `<span class="mde-math-inline" data-tex="${encodeURIComponent(token.content)}"></span>`;
-  };
-}
-
-/**
- * Register the full compatibility set used by the editor preview.
- *
- * Use this in Eleventy so generated pages parse custom markdown syntax exactly
- * like the editor preview.
- *
- * @param {import('markdown-it')} md markdown-it instance
- * @param {object} [opts]
- * @param {boolean} [opts.math=true]
- * @param {boolean} [opts.mermaid=true]
- * @param {boolean} [opts.drawio=true]
- * @param {boolean} [opts.imageDimensions=true]
- * @example
- * import MarkdownIt from 'markdown-it';
- * import { applyMdEditorCompatibilityPlugins } from 'md-wysiwyg-editor';
- *
- * const md = new MarkdownIt({ html: true, linkify: true });
- * applyMdEditorCompatibilityPlugins(md);
- */
-function applyMdEditorCompatibilityPlugins(md, opts = {}) {
-  const {
-    math = true,
-    mermaid = true,
-    drawio = true,
-    imageDimensions = true,
-  } = opts;
-
-  if (math) markdownItMathPlugin(md);
-  if (imageDimensions) markdownItImageDimensionsPlugin(md);
-  if (drawio) markdownItDrawioPlugin(md);
-  if (mermaid) markdownItMermaidPlugin(md);
-}
-
-/**
- * Helper for Eleventy markdown library setup.
- *
- * @param {object} eleventyConfig Eleventy config object
- * @param {object} [opts]
- * @param {object} [opts.markdownItOptions] Constructor options for markdown-it
- * @param {object} [opts.plugins] Forwarded to applyMdEditorCompatibilityPlugins
- * @returns {import('markdown-it')} configured markdown-it instance
- * @throws {Error} when `eleventyConfig` does not expose `setLibrary`
- * @example
- * import { configureEleventyMarkdown } from 'md-wysiwyg-editor';
- *
- * export default function(eleventyConfig) {
- *   configureEleventyMarkdown(eleventyConfig, {
- *     markdownItOptions: { html: true, linkify: true },
- *     plugins: { math: true, mermaid: true, drawio: true, imageDimensions: true },
- *   });
- * }
- */
-async function configureEleventyMarkdown(eleventyConfig, opts = {}) {
-  if (!eleventyConfig || typeof eleventyConfig.setLibrary !== 'function') {
-    throw new Error('configureEleventyMarkdown requires eleventyConfig.setLibrary');
-  }
-
-  const { default: MarkdownIt } = await Promise.resolve().then(function () { return index; });
-  const md = new MarkdownIt({
-    html: true,
-    linkify: true,
-    typographer: true,
-    ...(opts.markdownItOptions ?? {}),
-  });
-
-  applyMdEditorCompatibilityPlugins(md, opts.plugins ?? {});
-  eleventyConfig.setLibrary('md', md);
-  return md;
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escapeAttr(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;');
-}
-
-/**
  * md-wysiwyg-editor — public entry point
  *
  * Exports:
@@ -57579,11 +57347,5 @@ function createEditor(element, options = {}) {
 
 exports.EditorCore = EditorCore;
 exports.MdEditorElement = MdEditorElement;
-exports.applyMdEditorCompatibilityPlugins = applyMdEditorCompatibilityPlugins;
-exports.configureEleventyMarkdown = configureEleventyMarkdown;
 exports.createEditor = createEditor;
-exports.markdownItDrawioPlugin = markdownItDrawioPlugin;
-exports.markdownItImageDimensionsPlugin = markdownItImageDimensionsPlugin;
-exports.markdownItMathPlugin = markdownItMathPlugin;
-exports.markdownItMermaidPlugin = markdownItMermaidPlugin;
 //# sourceMappingURL=md-editor.cjs.js.map

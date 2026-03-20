@@ -38,6 +38,7 @@ export class Parser {
     });
 
     this._addMathRules();
+    this._addDrawioRules();
     this._patchRenderers();
   }
 
@@ -144,6 +145,40 @@ export class Parser {
   }
 
   // ------------------------------------------------------------
+  // draw.io markdown block rule: ![draw.io](image-src){xml-or-uri-encoded-xml}
+  // ------------------------------------------------------------
+  _addDrawioRules() {
+    const md = this._md;
+
+    md.block.ruler.before('paragraph', 'drawio_image_block', (state, startLine, endLine, silent) => {
+      const startPos = state.bMarks[startLine] + state.tShift[startLine];
+      const lineText = state.src.slice(startPos, state.eMarks[startLine]).trim();
+      const parsed = this._parseDrawioImageLine(lineText);
+      if (!parsed) return false;
+      if (silent) return true;
+
+      const token = state.push('drawio_image_block', 'div', 0);
+      token.block = true;
+      token.attrSet('data-drawio-src', parsed.src);
+      token.content = parsed.payload;
+      token.map = [startLine, startLine + 1];
+      state.line = startLine + 1;
+      return true;
+    });
+
+    md.renderer.rules.drawio_image_block = (tokens, idx) => {
+      const token = tokens[idx];
+      const imageSrc = token.attrGet('data-drawio-src') ?? '';
+      const encodedPayload = token.content;
+      const lineAttrs = token.map
+        ? ` data-source-line="${token.map[0]}" data-source-line-end="${token.map[1] - 1}"`
+        : '';
+
+      return `<img class="mde-drawio" data-mde-drawio-open data-drawio="${this._escAtt(encodedPayload)}"${lineAttrs} src="${this._escAtt(imageSrc)}" alt="draw.io diagram" loading="lazy">\n`;
+    };
+  }
+
+  // ------------------------------------------------------------
   // All other renderer patches
   // ------------------------------------------------------------
   _patchRenderers() {
@@ -224,7 +259,7 @@ export class Parser {
       return `<img ${attrs}>`;
     };
 
-    // ---- fence: drawio / mermaid special blocks; others → per-line spans ----
+    // ---- fence: mermaid special blocks; others → per-line spans ----
     md.renderer.rules.fence = (tokens, idx, options, env, self) => {
       const token    = tokens[idx];
       const langName = (token.info || '').trim().split(/\s+/)[0];
@@ -234,23 +269,6 @@ export class Parser {
       if (srcLine >= 0) {
         token.attrSet('data-source-line',     String(srcLine));
         token.attrSet('data-source-line-end', String(srcEnd));
-      }
-
-      // --- draw.io XML block ---
-      if (langName === 'drawio') {
-        const lineAttrs = srcLine >= 0
-          ? ` data-source-line="${srcLine}" data-source-line-end="${srcEnd}"`
-          : '';
-        const encoded = encodeURIComponent(token.content);
-        return (
-          `<div class="mde-drawio"${lineAttrs} data-drawio="${encoded}">` +
-          `<div class="mde-drawio__header">` +
-          `<strong>draw.io diagram</strong>` +
-          `<button type="button" class="mde-drawio__edit" data-mde-drawio-edit>Edit</button>` +
-          `</div>` +
-          `<pre class="mde-drawio__fallback"><code>${this._esc(token.content)}</code></pre>` +
-          `</div>\n`
-        );
       }
 
       // --- Mermaid ---
@@ -297,5 +315,16 @@ export class Parser {
 
   _escAtt(str) {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  _parseDrawioImageLine(line) {
+    const match = line.match(/^!\[draw\.io\]\((.*)\)\{([\s\S]*)\}$/);
+    if (!match) return null;
+
+    const src = match[1].trim();
+    const payload = match[2].trim();
+    if (!src || !payload) return null;
+
+    return { src, payload };
   }
 }
