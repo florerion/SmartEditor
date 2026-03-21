@@ -29,3 +29,11 @@
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.
+
+## draw.io Packaging
+- Keep draw.io self-hosted by default:
+	- download source webapp to `vendor/drawio/` via `scripts/download-drawio.mjs`
+	- copy to `dist/drawio/` during `npm run build` (`rollup.config.js`)
+- Do not switch default modal URL back to hosted embed; hosted `embed.diagrams.net` is fallback-only.
+- Keep draw.io version pinned via `DRAWIO_VERSION` constant in `scripts/download-drawio.mjs`; allow override by `DRAWIO_VERSION` env var.
+- For demo, keep draw.io URL aligned with repo-root serving model (`npx serve .` + `/demo/`), i.e. resolve from `../dist/drawio/`.
