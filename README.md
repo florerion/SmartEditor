@@ -103,6 +103,7 @@ Importing the library registers the custom element as a side effect.
 |---|---|---|---|
 | `value` | `string` | `''` | Initial markdown content. |
 | `mode` | `'split' \| 'code' \| 'preview' \| 'wysiwyg'` | `'split'` | Initial view mode (`wysiwyg` is preview-first beta mode). |
+| `scrollSync` | `boolean` | `true` | In `split` mode, synchronizes vertical scrolling between code and preview using smooth animated follow. |
 | `theme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Theme hint (`data-theme` on root). |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
@@ -125,6 +126,7 @@ Importing the library registers the custom element as a side effect.
 ```js
 const editor = createEditor('#editor', {
   value: '# Content',
+  scrollSync: true,
   upload: {
     endpoint: '/api/upload',
     headers: { Authorization: `Bearer ${token}` },
@@ -261,6 +263,7 @@ The editor auto-registers built-in toolbar actions grouped by intent.
 ### Parser-level extensions included in core
 
 - Source line mapping attributes for code-preview sync.
+- Split-mode bidirectional smooth vertical scroll sync between code and preview (`scrollSync`, enabled by default).
 - Table cell source-column metadata.
 - `draw.io` image block rendering from `![draw.io](image){xml}` with click-to-edit in preview.
 - Fenced `mermaid` block placeholders rendered with Mermaid (if present).

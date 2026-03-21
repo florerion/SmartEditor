@@ -9,13 +9,17 @@ export class PreviewPanel {
    * @param {HTMLElement} container
    * @param {object} opts
    * @param {Function} opts.onElementClick  ({ line, lineEnd, element }) => void
+   * @param {Function} opts.onScroll        () => void
    */
   constructor(container, opts) {
     this._container = container;
     this._onElementClick = opts.onElementClick ?? (() => {});
+    this._onScroll = opts.onScroll ?? (() => {});
     this._container.classList.add('mde-preview');
     this._boundClick = this._handleClick.bind(this);
+    this._boundScroll = this._handleScroll.bind(this);
     this._container.addEventListener('click', this._boundClick);
+    this._container.addEventListener('scroll', this._boundScroll, { passive: true });
   }
 
   /** @returns {HTMLElement} */
@@ -62,6 +66,7 @@ export class PreviewPanel {
 
   destroy() {
     this._container.removeEventListener('click', this._boundClick);
+    this._container.removeEventListener('scroll', this._boundScroll);
   }
 
   // ------ private ------
@@ -73,5 +78,9 @@ export class PreviewPanel {
     const rawEnd = el.getAttribute('data-source-line-end');
     const lineEnd = rawEnd != null ? parseInt(rawEnd, 10) : line;
     this._onElementClick({ line, lineEnd, element: el });
+  }
+
+  _handleScroll() {
+    this._onScroll();
   }
 }

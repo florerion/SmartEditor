@@ -29,6 +29,7 @@ export class EditorCore {
    * @param {object}      [opts]
    * @param {string}      [opts.value='']
    * @param {string}      [opts.mode='split']       'split' | 'code' | 'preview' | 'wysiwyg'
+  * @param {boolean}     [opts.scrollSync=true]    Keep code/preview vertical scroll synchronized in split mode
    * @param {string}      [opts.theme='auto']       'light' | 'dark' | 'auto'
    * @param {object}      [opts.markdown]
    * @param {object}      [opts.markdown.options]   Passed to markdown-it constructor
@@ -64,6 +65,11 @@ export class EditorCore {
     this._sync = new Sync();
     this._previewDebounce = null;
     this._mode = opts.mode ?? 'split';
+    this._scrollSyncEnabled = opts.scrollSync !== false;
+    this._scrollSyncSource = null;
+    this._scrollSyncReleaseTimer = null;
+    this._codeScrollRaf = null;
+    this._previewScrollRaf = null;
 
     this._diffModal = new DiffModal();
     this._drawioModal = new DrawioModal({ url: opts.drawio?.url });
@@ -200,6 +206,9 @@ export class EditorCore {
   /** Detach editor and clean up resources. */
   destroy() {
     clearTimeout(this._previewDebounce);
+    clearTimeout(this._scrollSyncReleaseTimer);
+    cancelAnimationFrame(this._codeScrollRaf);
+    cancelAnimationFrame(this._previewScrollRaf);
     this._codePanel.destroy();
     this._previewPanel.destroy();
     this._imageHandler?.destroy();
@@ -268,13 +277,19 @@ export class EditorCore {
       },
 
       onCursorMove: (line) => {
-        this._sync.codeLineToPreview(line, this._previewPanelEl);
+        if (this._mode === 'split') {
+          this._sync.codeLineToPreview(line, this._previewPanelEl);
+        }
         this._toolbar.updateState();
       },
 
       onSelectionChange: (selInfo) => {
         this._toolbar.updateState();
         this._opts.onSelectionChange?.(selInfo);
+      },
+
+      onScroll: (topLine) => {
+        this._handleCodePanelScroll(topLine);
       },
     });
 
@@ -289,6 +304,9 @@ export class EditorCore {
         this._codePanel.scrollToLine(line);
         this._bus.emit('previewClick', { line, lineEnd, element });
         this._opts.onPreviewClick?.(element, { from: line, to: lineEnd });
+      },
+      onScroll: () => {
+        this._handlePreviewPanelScroll();
       },
     });
 
@@ -459,6 +477,63 @@ export class EditorCore {
       this._root.classList.remove(`mde-mode-${m}`),
     );
     this._root.classList.add(`mde-mode-${this._mode}`);
+    if (!this._isScrollSyncActive()) {
+      this._scrollSyncSource = null;
+    }
+  }
+
+  _isScrollSyncActive() {
+    return this._scrollSyncEnabled && this._mode === 'split';
+  }
+
+  // Begin programmatic scroll lock and refresh its trailing timeout.
+  _markScrollSyncSource(source) {
+    this._scrollSyncSource = source;
+    this._extendScrollLock();
+  }
+
+  // Extend (or start) the trailing-debounce lock: releases 150 ms after the
+  // last echo scroll event, so it covers the full smooth-scroll animation.
+  _extendScrollLock() {
+    clearTimeout(this._scrollSyncReleaseTimer);
+    this._scrollSyncReleaseTimer = setTimeout(() => {
+      this._scrollSyncSource = null;
+    }, 150);
+  }
+
+  _handleCodePanelScroll(topLine) {
+    if (!this._isScrollSyncActive()) return;
+    if (this._scrollSyncSource === 'preview') {
+      // Echo from a preview-driven smooth scroll — keep the lock alive.
+      this._extendScrollLock();
+      return;
+    }
+
+    cancelAnimationFrame(this._codeScrollRaf);
+    this._codeScrollRaf = requestAnimationFrame(() => {
+      if (!this._isScrollSyncActive()) return;
+      if (!Number.isFinite(topLine)) return;
+      this._markScrollSyncSource('code');
+      this._sync.scrollPreviewToLine(topLine, this._previewPanelEl, { behavior: 'smooth' });
+    });
+  }
+
+  _handlePreviewPanelScroll() {
+    if (!this._isScrollSyncActive()) return;
+    if (this._scrollSyncSource === 'code') {
+      // Echo from a code-driven smooth scroll — keep the lock alive.
+      this._extendScrollLock();
+      return;
+    }
+
+    cancelAnimationFrame(this._previewScrollRaf);
+    this._previewScrollRaf = requestAnimationFrame(() => {
+      if (!this._isScrollSyncActive()) return;
+      const line = this._sync.getTopPreviewLine(this._previewPanelEl);
+      if (!Number.isFinite(line)) return;
+      this._markScrollSyncSource('preview');
+      this._codePanel.scrollViewportToLine(line, { behavior: 'smooth' });
+    });
   }
 
   _setupDividerResize() {

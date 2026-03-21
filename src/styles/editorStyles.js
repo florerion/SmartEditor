@@ -472,7 +472,6 @@ export const EDITOR_STYLES = `
    ============================================================ */
 .mde-drawio {
   display: block;
-  width: 100%;
   max-height: 460px;
   object-fit: contain;
   background: #fff;
@@ -530,15 +529,17 @@ export const EDITOR_STYLES = `
   grid-template-columns: 1fr 1fr;
   gap: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
-.mde-diff__col { display: flex; flex-direction: column; min-width: 0; }
+.mde-diff__col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .mde-diff__col + .mde-diff__col { border-left: 1px solid #e5e7eb; }
 .mde-diff__col-title { margin: 0; padding: 8px 10px; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
 
 .mde-diff__pre {
   margin: 0;
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
   font-family: var(--mde-font-mono, "Fira Code", Consolas, monospace);

@@ -30,6 +30,13 @@
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.
 
+## Scroll Sync
+- Split-mode bidirectional vertical scroll sync is implemented in `EditorCore` (`_handleCodePanelScroll`, `_handlePreviewPanelScroll`).
+- Loop prevention uses a trailing-debounce source lock (`_scrollSyncSource`, `_extendScrollLock()`); do not replace with a fixed timer.
+- `CodePanel.getTopVisibleLine()` must use `lineBlockAtHeight(scrollTop)` — do not revert to `viewport.from`.
+- Scroll sync is active only when `mode === 'split'` and `opts.scrollSync !== false`.
+- Clean up RAF handles and the release timer in `destroy()`.
+
 ## draw.io Packaging
 - Keep draw.io self-hosted by default:
 	- download source webapp to `vendor/drawio/` via `scripts/download-drawio.mjs`

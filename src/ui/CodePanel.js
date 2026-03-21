@@ -1,6 +1,9 @@
-import { EditorState, Transaction } from '@codemirror/state';
+import { EditorState, RangeSetBuilder, Transaction } from '@codemirror/state';
 import {
+  Decoration,
   EditorView,
+  ViewPlugin,
+  WidgetType,
   keymap,
   highlightSpecialChars,
   drawSelection,
@@ -26,6 +29,112 @@ import {
   indentOnInput,
 } from '@codemirror/language';
 
+const COLLAPSE_MIN_LENGTH = 140;
+const COLLAPSE_HEAD = 5;
+const COLLAPSE_TAIL = 5;
+
+class CollapseWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-mde-collapse-widget';
+    span.textContent = '[...]';
+    span.title = 'Long payload visually collapsed';
+    return span;
+  }
+}
+
+const collapseDecoration = Decoration.replace({
+  widget: new CollapseWidget(),
+  inclusive: false,
+});
+
+const longPayloadCollapsePlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = buildCollapseDecorations(view);
+  }
+
+  update(update) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = buildCollapseDecorations(update.view);
+    }
+  }
+}, {
+  decorations: plugin => plugin.decorations,
+});
+
+function buildCollapseDecorations(view) {
+  const builder = new RangeSetBuilder();
+  for (const range of view.visibleRanges) {
+    let line = view.state.doc.lineAt(range.from);
+    while (line.from <= range.to) {
+      addCollapsedRangesForLine(line, builder);
+      if (line.number >= view.state.doc.lines) break;
+      line = view.state.doc.line(line.number + 1);
+    }
+  }
+  return builder.finish();
+}
+
+function addCollapsedRangesForLine(line, builder) {
+  const collapsedRanges = [
+    ...findBase64Ranges(line),
+    ...findDrawioXmlRanges(line),
+  ].sort((a, b) => a.from - b.from);
+
+  for (const range of collapsedRanges) {
+    if (range.to > range.from) {
+      builder.add(range.from, range.to, collapseDecoration);
+    }
+  }
+}
+
+function findBase64Ranges(line) {
+  const result = [];
+  const text = line.text;
+  const imageRegex = /!\[[^\]]*\]\(([^)\r\n]+)\)/g;
+  let match;
+
+  while ((match = imageRegex.exec(text)) !== null) {
+    const src = match[1];
+    const markerIndex = src.indexOf(';base64,');
+    if (markerIndex < 0) continue;
+
+    const payloadStart = markerIndex + ';base64,'.length;
+    const payloadLength = src.length - payloadStart;
+    if (payloadLength <= COLLAPSE_MIN_LENGTH) continue;
+
+    const groupStart = match.index + match[0].indexOf('(') + 1;
+    const collapseFrom = line.from + groupStart + payloadStart + COLLAPSE_HEAD;
+    const collapseTo = line.from + groupStart + src.length - COLLAPSE_TAIL;
+    if (collapseTo > collapseFrom) {
+      result.push({ from: collapseFrom, to: collapseTo });
+    }
+  }
+
+  return result;
+}
+
+function findDrawioXmlRanges(line) {
+  const result = [];
+  const text = line.text;
+  const drawioRegex = /!\[draw\.io\]\([^)\r\n]+\)\{([^}]*)\}/g;
+  let match;
+
+  while ((match = drawioRegex.exec(text)) !== null) {
+    const xml = match[1];
+    if (xml.length <= COLLAPSE_MIN_LENGTH) continue;
+
+    const xmlStartInMatch = match[0].lastIndexOf('{') + 1;
+    const collapseFrom = line.from + match.index + xmlStartInMatch + COLLAPSE_HEAD;
+    const collapseTo = line.from + match.index + xmlStartInMatch + xml.length - COLLAPSE_TAIL;
+    if (collapseTo > collapseFrom) {
+      result.push({ from: collapseFrom, to: collapseTo });
+    }
+  }
+
+  return result;
+}
+
 /**
  * Thin wrapper around CodeMirror 6 exposing only the API needed by EditorCore.
  */
@@ -37,18 +146,24 @@ export class CodePanel {
    * @param {Function} opts.onChange         (value: string) => void
    * @param {Function} opts.onCursorMove     (line: number) => void  — 0-based
    * @param {Function} opts.onSelectionChange (selInfo: object) => void
+   * @param {Function} opts.onScroll         (topLine: number) => void  — 0-based
    */
   constructor(container, opts) {
     this._container = container;
     this._onChange = opts.onChange ?? (() => {});
     this._onCursorMove = opts.onCursorMove ?? (() => {});
     this._onSelectionChange = opts.onSelectionChange ?? (() => {});
+    this._onScroll = opts.onScroll ?? (() => {});
     this._suppressUpdate = false;
 
     this._view = new EditorView({
       state: this._buildState(opts.value ?? ''),
       parent: container,
     });
+
+    this._scroller = this._view.scrollDOM;
+    this._boundScroll = this._handleScroll.bind(this);
+    this._scroller.addEventListener('scroll', this._boundScroll, { passive: true });
   }
 
   // ------ public API ------
@@ -148,12 +263,40 @@ export class CodePanel {
     return state.doc.lineAt(state.selection.main.head).number - 1;
   }
 
+  /** @returns {number} 0-based line near the top of the visible editor viewport */
+  getTopVisibleLine() {
+    const scrollTop = this._scroller.scrollTop;
+    try {
+      const block = this._view.lineBlockAtHeight(scrollTop);
+      return this._view.state.doc.lineAt(block.from).number - 1;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Scroll viewport to a 0-based line without changing selection.
+   * @param {number} line
+   * @param {object} [opts]
+   * @param {'auto'|'smooth'} [opts.behavior='auto']
+   */
+  scrollViewportToLine(line, opts = {}) {
+    const state = this._view.state;
+    const cmLine = Math.max(1, Math.min(line + 1, state.doc.lines));
+    const pos = state.doc.line(cmLine).from;
+    const top = this._view.lineBlockAt(pos).top;
+    this._scroller.scrollTo({ top, behavior: opts.behavior ?? 'auto' });
+  }
+
   undo() { cmUndo(this._view); }
   redo() { cmRedo(this._view); }
 
   focus() { this._view.focus(); }
 
-  destroy() { this._view.destroy(); }
+  destroy() {
+    this._scroller?.removeEventListener('scroll', this._boundScroll);
+    this._view.destroy();
+  }
 
   // ------ private ------
 
@@ -178,6 +321,7 @@ export class CodePanel {
           ...historyKeymap,
           indentWithTab,
         ]),
+        longPayloadCollapsePlugin,
         EditorView.updateListener.of(update => {
           if (update.docChanged && !this._suppressUpdate) {
             this._onChange(update.state.doc.toString());
@@ -196,6 +340,11 @@ export class CodePanel {
           },
           '.cm-scroller': { overflow: 'auto' },
           '.cm-content': { padding: '8px 0' },
+          '.cm-mde-collapse-widget': {
+            color: 'var(--mde-color-muted, #6b7280)',
+            fontStyle: 'italic',
+            userSelect: 'none',
+          },
         }),
       ],
     });
@@ -210,5 +359,9 @@ export class CodePanel {
       lineFrom: state.doc.lineAt(sel.from).number - 1,
       lineTo: state.doc.lineAt(sel.to).number - 1,
     };
+  }
+
+  _handleScroll() {
+    this._onScroll(this.getTopVisibleLine());
   }
 }
