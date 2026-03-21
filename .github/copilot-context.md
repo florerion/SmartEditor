@@ -58,6 +58,33 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
   - `scripts/download-drawio.mjs`
   - `rollup.config.js`
 
+## Code-Preview Display & Sync (branch: code-preview-display)
+
+### Visual payload collapsing in CodeMirror
+- Long base64 image sources (`data:...;base64,...`) and draw.io XML payloads (`{uri-encoded-xml}`) are
+  visually truncated in the editor: `head[...]tail` using a `Decoration.replace` widget.
+- Actual document text is never modified; purely a view-layer effect.
+- Implementation: `longPayloadCollapsePlugin` ViewPlugin in `src/ui/CodePanel.js`.
+- Thresholds: `COLLAPSE_MIN_LENGTH`, `COLLAPSE_HEAD`, `COLLAPSE_TAIL` constants in `CodePanel.js`.
+
+### Diff modal scroll fix
+- `editor.proposeChange()` diff modal: long content is now scrollable.
+- Fix: added `overflow: hidden` to `.mde-diff__body` and `min-height: 0` to `.mde-diff__col`
+  and `.mde-diff__pre` in `src/styles/editorStyles.js`.
+
+### Split-mode bidirectional scroll sync
+- New option: `opts.scrollSync` (default `true`); active only in `mode === 'split'`, Y-axis only.
+- Code → preview: `EditorCore._handleCodePanelScroll` reads top-visible line via
+  `CodePanel.getTopVisibleLine()` (`lineBlockAtHeight(scrollTop)`) and calls
+  `Sync.scrollPreviewToLine(line, root, { behavior: 'smooth' })`.
+- Preview → code: `EditorCore._handlePreviewPanelScroll` reads top-visible source line via
+  `Sync.getTopPreviewLine(root)` and calls `CodePanel.scrollViewportToLine(line, { behavior: 'smooth' })`.
+- Loop guard: `_scrollSyncSource` flag (`'code'|'preview'|null`) with **trailing-debounce 150ms**
+  (each echo event from the steered panel resets the timer, covering the full smooth animation).
+- Key methods added to `Sync.js`: `scrollPreviewToLine`, `getTopPreviewLine`.
+- Key methods added to `CodePanel`: `getTopVisibleLine`, `scrollViewportToLine`, `onScroll` callback.
+- Key method added to `PreviewPanel`: `onScroll` callback.
+
 ## Build And Validation
 - Install deps: `npm install`
 - Build: `npm run build`
@@ -82,4 +109,4 @@ Use this project context and instruction files as the source of truth. Before ma
 
 ## Last Updated
 - Date: 2026-03-21
-- Reason: refresh context after self-hosted draw.io rollout (download/build pipeline, demo pathing, fallback guard)
+- Reason: added code-preview-display feature set (payload collapsing, diff modal scroll fix, split scroll sync)
