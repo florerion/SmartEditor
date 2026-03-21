@@ -15,7 +15,9 @@
   "files": ["dist"],
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c --watch"
+    "dev": "rollup -c --watch",
+    "drawio:download": "node scripts/download-drawio.mjs",
+    "postinstall": "node scripts/download-drawio.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^15.3.1",
+    "adm-zip": "^0.5.10",
     "rollup": "^4.34.9"
   }
 }

@@ -39,7 +39,10 @@ export class EditorCore {
    * @param {number}      [opts.upload.maxSize]     bytes, default 5 MB
    * @param {string[]}    [opts.upload.formats]     MIME types, default common images
    * @param {object}      [opts.drawio]
-   * @param {string}      [opts.drawio.url]         Embed URL, default embed.diagrams.net
+  * @param {string}      [opts.drawio.url]         Embed URL. Defaults to `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`
+   *                                                (the self-hosted copy bundled in dist/drawio/).
+  *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
+   *                                                to use the public hosted version instead.
    * @param {Function}    [opts.onChange]           (markdown, tokens, html) => void
    * @param {Function}    [opts.onSelectionChange]  (selInfo) => void
    * @param {Function}    [opts.onPaste]            (clipboardEvent) => void

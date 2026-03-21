@@ -28,9 +28,11 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        # postinstall automatically downloads the pinned draw.io webapp to vendor/drawio/
         run: npm ci
 
       - name: Build library
+        # build also copies vendor/drawio/ → dist/drawio/
         run: npm run build
 
       - name: Prepare Pages artifact

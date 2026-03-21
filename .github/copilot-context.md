@@ -38,16 +38,31 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Clicking a draw.io image in preview opens modal edit for that diagram payload.
 - Toolbar draw.io action always starts from a fresh, blank diagram:
   - `openDrawioEditor({ forceNew: true })`
+- draw.io runtime is self-hosted by default (offline-friendly):
+  - Source is downloaded on install to `vendor/drawio/`.
+  - Build copies `vendor/drawio/` to `dist/drawio/`.
+  - Default modal URL is `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
+  - Demo overrides URL to `../dist/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
+- Versioning model for bundled draw.io:
+  - Pinned in `scripts/download-drawio.mjs` as `DRAWIO_VERSION`.
+  - Override with environment variable `DRAWIO_VERSION`.
+  - `DRAWIO_VERSION=latest` resolves from GitHub Releases API.
+- Runtime resilience:
+  - `DrawioModal` has a guard for self-hosted failures (iframe error or no `init` event in time).
+  - Guard performs one-time fallback to hosted `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
 - Core files involved:
   - `src/core/Parser.js`
   - `src/core/EditorCore.js`
   - `src/ui/DrawioModal.js`
   - `src/plugins/drawio.js`
+  - `scripts/download-drawio.mjs`
+  - `rollup.config.js`
 
 ## Build And Validation
 - Install deps: `npm install`
 - Build: `npm run build`
 - Dev watch: `npm run dev`
+- Re-download bundled draw.io manually: `npm run drawio:download`
 - No test/lint scripts defined currently; verify changes with `npm run build`.
 
 ## Recommended Handoff Workflow
@@ -66,5 +81,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-20
-- Reason: refresh context after draw.io format/UX refactor (image+xml serialization, preview click-edit, force-new toolbar behavior)
+- Date: 2026-03-21
+- Reason: refresh context after self-hosted draw.io rollout (download/build pipeline, demo pathing, fallback guard)

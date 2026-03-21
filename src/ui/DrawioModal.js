@@ -7,14 +7,21 @@
 export class DrawioModal {
   /** @param {{ url?: string }} [opts] */
   constructor(opts = {}) {
-    this._url = opts.url ?? 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1';
+    // Default points to the self-hosted copy bundled with the editor at dist/drawio/.
+    // Directory URL (with trailing slash) avoids broken relative asset paths on some static servers.
+    this._url = opts.url ?? './drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1';
+    this._fallbackUrl = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1';
     this._overlay = null;
     this._iframe = null;
     this._resolver = null;
     this._boundMsg = this._onMessage.bind(this);
     this._boundKey = this._onKey.bind(this);
+    this._boundIframeError = this._onIframeError.bind(this);
     this._pendingXml = '';
     this._pendingSaveXml = '';
+    this._initTimeout = null;
+    this._initSeen = false;
+    this._fallbackUsed = false;
   }
 
   /**
@@ -26,7 +33,9 @@ export class DrawioModal {
     this.close(null);
 
     this._pendingXml = initialXml || _defaultDiagramXml();
-  this._pendingSaveXml = '';
+    this._pendingSaveXml = '';
+    this._initSeen = false;
+    this._fallbackUsed = false;
 
     this._overlay = document.createElement('div');
     this._overlay.className = 'mde-drawio-overlay';
@@ -42,8 +51,8 @@ export class DrawioModal {
 
     this._iframe = document.createElement('iframe');
     this._iframe.className = 'mde-drawio-modal__frame';
-    this._iframe.src = this._url;
     this._iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+    this._iframe.addEventListener('error', this._boundIframeError);
 
     this._overlay.querySelector('.mde-drawio-modal__frame-wrap').appendChild(this._iframe);
 
@@ -55,6 +64,8 @@ export class DrawioModal {
     document.body.appendChild(this._overlay);
     window.addEventListener('message', this._boundMsg);
     document.addEventListener('keydown', this._boundKey);
+    this._setIframeUrl(this._url);
+    this._armInitGuard();
 
     return new Promise(resolve => {
       this._resolver = resolve;
@@ -63,7 +74,10 @@ export class DrawioModal {
 
   /** @param {{ xml: string, imageSrc: string }|null} result */
   close(result) {
+    this._clearInitGuard();
+
     if (this._overlay) {
+      this._iframe?.removeEventListener('error', this._boundIframeError);
       this._overlay.remove();
       this._overlay = null;
       this._iframe = null;
@@ -96,6 +110,8 @@ export class DrawioModal {
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.event === 'init') {
+      this._initSeen = true;
+      this._clearInitGuard();
       this._post({ action: 'load', xml: this._pendingXml, autosave: 1 });
       return;
     }
@@ -124,6 +140,42 @@ export class DrawioModal {
 
   _post(payload) {
     this._iframe?.contentWindow?.postMessage(JSON.stringify(payload), '*');
+  }
+
+  _setIframeUrl(url) {
+    if (!this._iframe) return;
+    this._iframe.src = url;
+  }
+
+  _armInitGuard() {
+    this._clearInitGuard();
+    // If draw.io does not send init in time, retry once with hosted embed.
+    this._initTimeout = setTimeout(() => {
+      if (!this._initSeen) this._fallbackToHosted('init-timeout');
+    }, 4000);
+  }
+
+  _clearInitGuard() {
+    if (!this._initTimeout) return;
+    clearTimeout(this._initTimeout);
+    this._initTimeout = null;
+  }
+
+  _onIframeError() {
+    this._fallbackToHosted('iframe-error');
+  }
+
+  _fallbackToHosted(reason) {
+    if (!this._iframe) return;
+    if (this._fallbackUsed) return;
+    if (this._url === this._fallbackUrl) return;
+
+    this._fallbackUsed = true;
+    this._initSeen = false;
+    this._clearInitGuard();
+    console.warn(`[DrawioModal] Local draw.io failed (${reason}), falling back to hosted embed.`);
+    this._setIframeUrl(this._fallbackUrl);
+    this._armInitGuard();
   }
 
   _normalizeExportData(data) {
