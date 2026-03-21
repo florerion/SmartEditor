@@ -26,6 +26,8 @@
 - Preserve sync mapping behavior: keep `data-source-line` / `data-source-line-end` support intact across parser and preview.
 - If introducing new HTML attributes needed in preview, update DOMPurify allowlist in `src/ui/PreviewPanel.js`.
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
+- Prefer declarative toolbar composition through `opts.toolbar` for visibility/order/group/display concerns; treat action `group/order` as fallback defaults.
+- For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.

@@ -76,6 +76,8 @@
       <button onclick="doInsert()">insertText()</button>
       <button onclick="doPropose()">proposeChange()</button>
       <button onclick="doRegister()">registerAction()</button>
+      <button onclick="addTemplate()">addTemplate()</button>
+      <button onclick="removeTemplate()">removeTemplate()</button>
       <button onclick="toggleMode()">toggleMode()</button>
       <button onclick="toggleTheme()">toggleTheme()</button>
     </div>
@@ -162,12 +164,118 @@ Hover na obrazek w preview → pojawi się uchwyt resize (prawy dolny róg).
 Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej linii.
 `;
 
+    const templateCatalog = [
+      { id: 'news', label: 'News Article' },
+      { id: 'review', label: 'Product Review' },
+    ];
+
+    let showRegisteredStar = false;
+
+    function buildToolbarConfig() {
+      return {
+        groups: [
+          {
+            id: 'inline',
+            order: 10,
+            items: [
+              { action: 'bold', display: 'icon' },
+              { action: 'italic', display: 'icon' },
+              { action: 'strikethrough', display: 'icon' },
+              { action: 'inline-code', display: 'icon' },
+            ],
+          },
+          {
+            id: 'blocks',
+            order: 20,
+            items: [
+              {
+                id: 'headings',
+                label: 'Headings',
+                display: 'label',
+                items: [
+                  { action: 'h1', label: 'H1', display: 'label' },
+                  { action: 'h2', label: 'H2', display: 'label' },
+                  { action: 'h3', label: 'H3', display: 'label' },
+                ],
+              },
+              { action: 'blockquote', display: 'icon' },
+              { action: 'hr', display: 'icon' },
+              { action: 'code-block', display: 'icon' },
+            ],
+          },
+          {
+            id: 'lists',
+            order: 30,
+            items: [
+              { action: 'ul', display: 'icon' },
+              { action: 'ol', display: 'icon' },
+              { action: 'task-list', display: 'icon' },
+            ],
+          },
+          {
+            id: 'insert',
+            order: 40,
+            items: [
+              { action: 'link', display: 'icon' },
+              { action: 'image', display: 'icon' },
+              { action: 'image-upload', label: 'Upload', display: 'icon-label' },
+              { action: 'table', display: 'icon' },
+              { action: 'mermaid', display: 'icon' },
+              { action: 'drawio', label: 'Diagram', display: 'label' },
+            ],
+          },
+          {
+            id: 'templates',
+            order: 50,
+            items: [
+              {
+                id: 'templates-menu',
+                label: 'Templates',
+                display: 'label',
+                items: templateCatalog.map((template) => ({
+                  id: `template-${template.id}`,
+                  label: template.label,
+                  display: 'label',
+                  args: { templateId: template.id },
+                  async run(api, state, args) {
+                    log(`Templates → loading ${args.templateId}`);
+                    const markdown = await fakeTemplateFetch(args.templateId);
+                    api.replaceSelection(markdown);
+                    log(`Templates → applied ${args.templateId}`);
+                  },
+                })),
+              },
+            ],
+          },
+          {
+            id: 'custom',
+            order: 60,
+            items: showRegisteredStar ? [
+              { action: 'star-wrap', label: 'Highlight', display: 'label' },
+            ] : [],
+          },
+        ],
+      };
+    }
+
+    async function fakeTemplateFetch(templateId) {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      const templates = {
+        news: '# News Article\n\n## Lead\n\nShort summary for the article.\n\n## Body\n\n- Key point 1\n- Key point 2\n- Key point 3\n',
+        review: '# Product Review\n\n## Verdict\n\n**Score:** 8/10\n\n## Pros\n\n- Clear benefit\n- Strong detail\n\n## Cons\n\n- Known limitation\n',
+      };
+
+      return templates[templateId] ?? `# Template ${templateId}\n\nNo demo content available.`;
+    }
+
     // ------------------------------------------------------------------ //
     // Create editor
     // ------------------------------------------------------------------ //
     window.editor = createEditor('#editor-container', {
       value: DEMO,
       mode: 'split',
+      toolbar: buildToolbarConfig(),
       drawio: {
         // Local demo is served from /demo, while bundled draw.io lives in /dist/drawio.
         // Directory URL keeps draw.io relative assets under /dist/drawio/.
@@ -230,7 +338,55 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
           }
         },
       });
-      log('registerAction() — przycisk ⭐ dodany do toolbar');
+      showRegisteredStar = true;
+      editor.upsertToolbarItem('custom', {
+        id: 'star-wrap-item',
+        action: 'star-wrap',
+        label: 'Highlight',
+        display: 'label',
+      });
+      log('registerAction() — akcja ⭐ dodana i pokazana w toolbar');
+    };
+
+    let extraTemplateCount = 1;
+    window.addTemplate = () => {
+      const templateId = `custom-${extraTemplateCount}`;
+      templateCatalog.push({
+        id: templateId,
+        label: `Custom Template ${extraTemplateCount}`,
+      });
+      const label = `Custom Template ${extraTemplateCount}`;
+      extraTemplateCount += 1;
+      editor.upsertDropdownItem('templates', 'templates-menu', {
+        id: `template-${templateId}`,
+        label,
+        display: 'label',
+        args: { templateId },
+        async run(api, state, args) {
+          log(`Templates → loading ${args.templateId}`);
+          const markdown = await fakeTemplateFetch(args.templateId);
+          api.setMarkdown(markdown);
+          log(`Templates → applied ${args.templateId}`);
+        },
+      });
+      log(`upsertDropdownItem() — dodano ${templateId} do Templates`);
+    };
+
+    window.removeTemplate = () => {
+      const customTemplate = [...templateCatalog]
+        .reverse()
+        .find((entry) => entry.id.startsWith('custom-'));
+
+      if (!customTemplate) {
+        log('Brak custom templatek do usunięcia');
+        return;
+      }
+
+      const idx = templateCatalog.findIndex((entry) => entry.id === customTemplate.id);
+      if (idx !== -1) templateCatalog.splice(idx, 1);
+
+      editor.removeDropdownItem('templates', 'templates-menu', `template-${customTemplate.id}`);
+      log(`removeDropdownItem() — usunięto ${customTemplate.id} z Templates`);
     };
 
     const MODES = ['split', 'code', 'preview', 'wysiwyg'];

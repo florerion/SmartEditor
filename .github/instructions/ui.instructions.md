@@ -11,5 +11,8 @@ applyTo: "src/ui/**"
 - Preserve scroll position on preview re-render unless a feature explicitly requires scroll reset.
 - In `CodePanel`, keep editor-facing selection/line behavior 0-based and compatible with `EditorCore` APIs.
 - Respect undo semantics in write operations (`undoable=false` must avoid history insertion where applicable).
-- In `Toolbar`, keep action rendering deterministic by `group` and `order`; avoid implicit ordering side effects.
+- In `Toolbar`, keep rendering deterministic:
+	- action-derived fallback mode should still respect `group` and `order`,
+	- declarative mode should follow explicit `toolbar.groups/items` order only.
+- Preserve dropdown UX safeguards in `Toolbar` (hover bridge + delayed close + click/focus support); avoid immediate close on transient pointer gaps.
 - Ensure every component that attaches listeners/timers cleans them in `destroy()`.
