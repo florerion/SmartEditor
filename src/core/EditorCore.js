@@ -44,6 +44,7 @@ export class EditorCore {
    *                                                (the self-hosted copy bundled in dist/drawio/).
   *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
    *                                                to use the public hosted version instead.
+  * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
    * @param {Function}    [opts.onChange]           (markdown, tokens, html) => void
    * @param {Function}    [opts.onSelectionChange]  (selInfo) => void
    * @param {Function}    [opts.onPaste]            (clipboardEvent) => void
@@ -82,6 +83,7 @@ export class EditorCore {
     this._buildImageHandler();
 
     registerDefaultActions(this._toolbar);
+    this.setToolbarConfig(opts.toolbar ?? null);
 
     // Initial render
     this._updatePreview(this._state.value);
@@ -149,6 +151,198 @@ export class EditorCore {
   /** @param {string} id */
   unregisterAction(id) { this._toolbar.unregisterAction(id); }
 
+  /** @returns {object|null} */
+  getToolbarConfig() { return this._toolbar.getConfig(); }
+
+  /** @param {object|null} config */
+  setToolbarConfig(config) {
+    this._opts.toolbar = config ?? undefined;
+    this._toolbar.setConfig(config ?? null);
+  }
+
+  /**
+   * Update toolbar config with a mutator callback.
+   *
+   * @param {(config: object) => (object|void)} mutator
+   * @returns {object} Applied toolbar config
+   *
+   * @example
+   * editor.updateToolbarConfig((config) => {
+   *   config.groups.push({ id: 'custom', order: 500, items: [] });
+   * });
+   *
+   * @throws {Error} If `mutator` is not a function
+   */
+  updateToolbarConfig(mutator) {
+    if (typeof mutator !== 'function') {
+      throw new Error('[EditorCore] updateToolbarConfig requires a function mutator.');
+    }
+
+    const base = this.getToolbarConfig() ?? { groups: [] };
+    const draft = _deepCloneToolbarConfig(base);
+    const result = mutator(draft);
+    const next = result && typeof result === 'object' ? result : draft;
+
+    this.setToolbarConfig(next);
+    return this.getToolbarConfig() ?? next;
+  }
+
+  /**
+   * Insert or replace a toolbar group by id.
+   *
+   * @param {object} group
+   * @param {string} group.id
+   * @param {number} [group.order]
+   * @param {Array} [group.items]
+   * @returns {object} Applied toolbar config
+   * @throws {Error} If group id is missing
+   */
+  upsertToolbarGroup(group) {
+    if (!group || typeof group.id !== 'string' || !group.id.trim()) {
+      throw new Error('[EditorCore] upsertToolbarGroup requires a non-empty group.id.');
+    }
+
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      const idx = groups.findIndex((entry) => entry?.id === group.id);
+      if (idx === -1) {
+        groups.push({
+          id: group.id,
+          order: Number.isFinite(group.order) ? group.order : groups.length * 100,
+          items: Array.isArray(group.items) ? [...group.items] : [],
+        });
+        return config;
+      }
+
+      const prev = groups[idx] ?? {};
+      groups[idx] = {
+        ...prev,
+        ...group,
+        id: group.id,
+        items: Array.isArray(group.items) ? [...group.items] : (Array.isArray(prev.items) ? prev.items : []),
+      };
+
+      return config;
+    });
+  }
+
+  /**
+   * Remove a toolbar group by id.
+   * @param {string} groupId
+   * @returns {object} Applied toolbar config
+   */
+  removeToolbarGroup(groupId) {
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      config.groups = groups.filter((group) => group?.id !== groupId);
+      return config;
+    });
+  }
+
+  /**
+   * Insert or replace an item in a toolbar group.
+   *
+   * @param {string} groupId
+   * @param {object|string} item
+   * @param {object} [position]
+   * @param {string} [position.beforeId]
+   * @param {string} [position.afterId]
+   * @returns {object} Applied toolbar config
+   */
+  upsertToolbarItem(groupId, item, position = {}) {
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      const group = this._ensureToolbarGroup(groups, groupId);
+      const items = Array.isArray(group.items) ? [...group.items] : [];
+
+      const itemId = _getToolbarItemId(item);
+      if (itemId) {
+        const existingIdx = items.findIndex((entry) => _getToolbarItemId(entry) === itemId);
+        if (existingIdx !== -1) items.splice(existingIdx, 1);
+      }
+
+      const insertIndex = _resolveInsertIndex(items, position.beforeId, position.afterId);
+      items.splice(insertIndex, 0, item);
+      group.items = items;
+
+      return config;
+    });
+  }
+
+  /**
+   * Remove an item from a toolbar group.
+   * @param {string} groupId
+   * @param {string} itemId
+   * @returns {object} Applied toolbar config
+   */
+  removeToolbarItem(groupId, itemId) {
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      const group = groups.find((entry) => entry?.id === groupId);
+      if (!group || !Array.isArray(group.items)) return config;
+      group.items = group.items.filter((entry) => _getToolbarItemId(entry) !== itemId);
+      return config;
+    });
+  }
+
+  /**
+   * Insert or replace an item inside a dropdown.
+   *
+   * @param {string} groupId
+   * @param {string} dropdownId
+   * @param {object|string} item
+   * @param {object} [position]
+   * @param {string} [position.beforeId]
+   * @param {string} [position.afterId]
+   * @returns {object} Applied toolbar config
+   */
+  upsertDropdownItem(groupId, dropdownId, item, position = {}) {
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      const group = this._ensureToolbarGroup(groups, groupId);
+      if (!Array.isArray(group.items)) group.items = [];
+
+      const dropdown = group.items.find((entry) => _getToolbarItemId(entry) === dropdownId);
+      if (!dropdown || !Array.isArray(dropdown.items)) {
+        throw new Error(`[EditorCore] Dropdown "${dropdownId}" not found in group "${groupId}".`);
+      }
+
+      const dropdownItems = [...dropdown.items];
+      const itemId = _getToolbarItemId(item);
+      if (itemId) {
+        const existingIdx = dropdownItems.findIndex((entry) => _getToolbarItemId(entry) === itemId);
+        if (existingIdx !== -1) dropdownItems.splice(existingIdx, 1);
+      }
+
+      const insertIndex = _resolveInsertIndex(dropdownItems, position.beforeId, position.afterId);
+      dropdownItems.splice(insertIndex, 0, item);
+      dropdown.items = dropdownItems;
+
+      return config;
+    });
+  }
+
+  /**
+   * Remove an item from a dropdown.
+   * @param {string} groupId
+   * @param {string} dropdownId
+   * @param {string} itemId
+   * @returns {object} Applied toolbar config
+   */
+  removeDropdownItem(groupId, dropdownId, itemId) {
+    return this.updateToolbarConfig((config) => {
+      const groups = this._ensureToolbarGroupsArray(config);
+      const group = groups.find((entry) => entry?.id === groupId);
+      if (!group || !Array.isArray(group.items)) return config;
+
+      const dropdown = group.items.find((entry) => _getToolbarItemId(entry) === dropdownId);
+      if (!dropdown || !Array.isArray(dropdown.items)) return config;
+
+      dropdown.items = dropdown.items.filter((entry) => _getToolbarItemId(entry) !== itemId);
+      return config;
+    });
+  }
+
   /**
    * Execute a registered action programmatically.
    * @param {string} id
@@ -211,6 +405,7 @@ export class EditorCore {
     cancelAnimationFrame(this._previewScrollRaf);
     this._codePanel.destroy();
     this._previewPanel.destroy();
+    this._toolbar?.destroy();
     this._imageHandler?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
@@ -594,11 +789,90 @@ export class EditorCore {
       setSelection: (f, t) => this.setSelection(f, t),
       insertText: (text, pos) => this.insertText(text, pos),
       replaceSelection: (text) => this.replaceSelection(text),
+      registerAction: (def) => this.registerAction(def),
+      unregisterAction: (id) => this.unregisterAction(id),
+      getToolbarConfig: () => this.getToolbarConfig(),
+      setToolbarConfig: (config) => this.setToolbarConfig(config),
+      updateToolbarConfig: (mutator) => this.updateToolbarConfig(mutator),
+      upsertToolbarGroup: (group) => this.upsertToolbarGroup(group),
+      removeToolbarGroup: (groupId) => this.removeToolbarGroup(groupId),
+      upsertToolbarItem: (groupId, item, position) => this.upsertToolbarItem(groupId, item, position),
+      removeToolbarItem: (groupId, itemId) => this.removeToolbarItem(groupId, itemId),
+      upsertDropdownItem: (groupId, dropdownId, item, position) => this.upsertDropdownItem(groupId, dropdownId, item, position),
+      removeDropdownItem: (groupId, dropdownId, itemId) => this.removeDropdownItem(groupId, dropdownId, itemId),
       runCommand: (id, args) => this.runCommand(id, args),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       focus: () => this.focus(),
     };
   }
+
+  _ensureToolbarGroupsArray(config) {
+    if (!config.groups) {
+      config.groups = [];
+      return config.groups;
+    }
+
+    if (Array.isArray(config.groups)) return config.groups;
+
+    const groupsArray = Object.entries(config.groups).map(([key, group], index) => ({
+      ...(group ?? {}),
+      id: group?.id ?? key,
+      order: Number.isFinite(group?.order) ? group.order : index * 100,
+      items: Array.isArray(group?.items) ? [...group.items] : [],
+    }));
+
+    config.groups = groupsArray;
+    return config.groups;
+  }
+
+  _ensureToolbarGroup(groups, groupId) {
+    let group = groups.find((entry) => entry?.id === groupId);
+    if (group) return group;
+
+    group = {
+      id: groupId,
+      order: groups.length * 100,
+      items: [],
+    };
+    groups.push(group);
+    return group;
+  }
+}
+
+function _deepCloneToolbarConfig(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => _deepCloneToolbarConfig(entry));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const out = {};
+  Object.entries(value).forEach(([key, entry]) => {
+    out[key] = _deepCloneToolbarConfig(entry);
+  });
+  return out;
+}
+
+function _getToolbarItemId(item) {
+  if (typeof item === 'string') return item;
+  if (!item || typeof item !== 'object') return null;
+  return item.id ?? item.action ?? null;
+}
+
+function _resolveInsertIndex(items, beforeId, afterId) {
+  if (beforeId) {
+    const beforeIdx = items.findIndex((entry) => _getToolbarItemId(entry) === beforeId);
+    if (beforeIdx !== -1) return beforeIdx;
+  }
+
+  if (afterId) {
+    const afterIdx = items.findIndex((entry) => _getToolbarItemId(entry) === afterId);
+    if (afterIdx !== -1) return afterIdx + 1;
+  }
+
+  return items.length;
 }
 
 function _defaultDrawioImage() {

@@ -10,5 +10,6 @@ applyTo: "src/core/**"
 - Keep editor-facing line indices 0-based in APIs and sync logic.
 - If parser output introduces new preview attributes, update DOMPurify allowlist in `src/ui/PreviewPanel.js`.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`: `undoable=false` must not add entries to history.
+- For toolbar changes in `EditorCore`, prefer additive runtime APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over forcing full config replacement.
 - Maintain cleanup discipline: timers, DOM listeners, and document-level handlers must be removed in `destroy()` paths.
 - Prefer additive, local changes over cross-cutting rewrites in core modules.

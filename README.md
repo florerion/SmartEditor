@@ -111,7 +111,8 @@ Importing the library registers the custom element as a side effect.
 | `upload.headers` | `object` | `{}` | Headers for upload requests (e.g. auth). |
 | `upload.maxSize` | `number` | `5 * 1024 * 1024` | Max image size in bytes. |
 | `upload.formats` | `string[]` | common image MIME list | Allowed image MIME types. |
-| `drawio.url` | `string` | `https://embed.diagrams.net/?embed=1&spin=1&proto=json` | draw.io embed URL used by modal. |
+| `drawio.url` | `string` | `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. |
+| `toolbar` | `object` | `undefined` | Declarative toolbar layout: visible items, grouping, ordering, display mode, and dropdown menus. |
 | `onChange` | `function` | `undefined` | Called with `(markdown, tokens, html)`. |
 | `onSelectionChange` | `function` | `undefined` | Called with current selection object. |
 | `onPaste` | `function` | `undefined` | Native paste event hook. |
@@ -163,6 +164,15 @@ Returned editor instance (or `<md-editor>` proxies) provides:
 | `getMode` | `() => mode` | Read current mode. |
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
+| `getToolbarConfig` | `() => object \| null` | Get the current declarative toolbar config, if one is active. |
+| `setToolbarConfig` | `(config) => void` | Replace the toolbar layout at runtime. |
+| `updateToolbarConfig` | `(mutator) => object` | Mutate current toolbar config via callback and apply it. |
+| `upsertToolbarGroup` | `(group) => object` | Add or replace one toolbar group by id. |
+| `removeToolbarGroup` | `(groupId) => object` | Remove one toolbar group by id. |
+| `upsertToolbarItem` | `(groupId, item, position?) => object` | Add or replace one top-level group item. |
+| `removeToolbarItem` | `(groupId, itemId) => object` | Remove one top-level group item by id. |
+| `upsertDropdownItem` | `(groupId, dropdownId, item, position?) => object` | Add or replace one dropdown entry. |
+| `removeDropdownItem` | `(groupId, dropdownId, itemId) => object` | Remove one dropdown entry by id. |
 | `runCommand` | `(id, args?)` | Run action by id programmatically. |
 | `openDrawioEditor` | `(opts?) => Promise<boolean>` | Open draw.io modal and insert/update `![draw.io](image){xml}` block line. |
 | `proposeChange` | `(newMarkdown) => Promise<boolean>` | Open diff modal and apply if accepted. |
@@ -274,6 +284,138 @@ The editor auto-registers built-in toolbar actions grouped by intent.
 
 Use `registerAction` to add custom actions to the toolbar.
 
+## Toolbar Layout Configuration
+
+If `toolbar` is omitted, the editor renders the legacy toolbar derived from registered actions (`group` + `order`).
+
+If `toolbar` is provided, the toolbar becomes fully declarative: you decide which items are visible, in what order, in which group, and whether each item renders as `label`, `icon`, or `icon-label`.
+
+### Supported item types
+
+- Action reference: maps to a registered action by id.
+- Custom item: defines its own `run(api, state, args?)` inline.
+- Dropdown: groups action references and custom items under one hover/click trigger.
+
+### Toolbar config example
+
+```js
+const toolbar = {
+  groups: [
+    {
+      id: 'inline',
+      order: 10,
+      items: [
+        { action: 'bold', display: 'icon' },
+        { action: 'italic', display: 'icon' },
+        {
+          id: 'more-inline',
+          label: 'More',
+          display: 'icon-label',
+          items: [
+            { action: 'strikethrough', display: 'label' },
+            { action: 'inline-code', label: 'Code', display: 'label' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'templates',
+      order: 20,
+      items: [
+        {
+          id: 'templates-menu',
+          label: 'Templates',
+          display: 'label',
+          items: [
+            {
+              id: 'template-news',
+              label: 'News Article',
+              args: { templateId: 'news' },
+              async run(api, state, args) {
+                const res = await fetch(`/api/templates/${args.templateId}`);
+                const { markdown } = await res.json();
+                api.setMarkdown(markdown);
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+```
+
+### Group schema
+
+```ts
+{
+  id?: string,
+  order?: number,
+  items: ToolbarItem[],
+}
+```
+
+`toolbar.groups` accepts either an array of group objects or an object map keyed by group id.
+
+### Item schema
+
+```ts
+type ToolbarDisplay = 'label' | 'icon' | 'icon-label';
+
+type ToolbarItem =
+  | string
+  | {
+      id?: string,
+      action: string,
+      label?: string,
+      icon?: string,
+      title?: string,
+      shortcut?: string,
+      display?: ToolbarDisplay,
+      args?: object,
+    }
+  | {
+      id?: string,
+      label?: string,
+      icon?: string,
+      title?: string,
+      shortcut?: string,
+      display?: ToolbarDisplay,
+      args?: object,
+      isEnabled?: (state) => boolean,
+      isActive?: (state) => boolean,
+      run: (api, state, args?) => void | Promise<void>,
+    }
+  | {
+      id?: string,
+      label?: string,
+      icon?: string,
+      title?: string,
+      display?: ToolbarDisplay,
+      items: Array<string | object>,
+    };
+```
+
+### Runtime toolbar updates
+
+Use helper methods when host data changes, for example after the user creates a new template.
+
+```js
+editor.upsertDropdownItem('templates', 'templates-menu', {
+  id: 'template-new',
+  label: 'New Template',
+  async run(api) {
+    const res = await fetch('/api/templates/new');
+    const { markdown } = await res.json();
+    api.setMarkdown(markdown);
+  },
+});
+
+editor.removeDropdownItem('templates', 'templates-menu', 'template-new');
+```
+
+Positioning is supported by optional `{ beforeId, afterId }` for `upsertToolbarItem` and `upsertDropdownItem`.
+
 ### Action schema
 
 ```ts
@@ -298,6 +440,11 @@ Use `registerAction` to add custom actions to the toolbar.
 - `getSelection`, `setSelection`
 - `insertText`, `replaceSelection`
 - `runCommand`
+- `getToolbarConfig`, `setToolbarConfig`
+- `updateToolbarConfig`
+- `upsertToolbarGroup`, `removeToolbarGroup`
+- `upsertToolbarItem`, `removeToolbarItem`
+- `upsertDropdownItem`, `removeDropdownItem`
 - `openDrawioEditor`
 - `focus`
 
@@ -394,6 +541,13 @@ Use this section as a compatibility reference when upgrading the editor in host 
 - Treat callback signature changes in `Configuration Options` as breaking.
 - Treat changes to markdown serialization conventions (`draw.io` image+xml block, image `|WxH`) as breaking for downstream pipelines.
 - Prefer additive changes for custom action integrations: add new action IDs instead of mutating existing IDs used by host automation.
+
+### `0.2.0`
+
+- Added declarative `toolbar` config for explicit grouping, ordering, display mode selection, and dropdown menus.
+- Added runtime toolbar methods: `getToolbarConfig()` and `setToolbarConfig(config)`.
+- Toolbar items now support inline async `run(api, state, args?)` handlers in addition to references to registered actions.
+- Added runtime toolbar helper methods for granular updates (`updateToolbarConfig`, `upsert/remove` for groups/items/dropdown items).
 
 ## Development Commands
 

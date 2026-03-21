@@ -30,6 +30,23 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Ensure classes that register listeners/timers clean them up in `destroy()`.
 - Keep plugin behavior in actions where possible (`registerAction` schema).
 
+## Toolbar Snapshot (Current)
+- Toolbar supports two rendering modes:
+  - Legacy action-derived layout (`group` + `order`) when `opts.toolbar` is omitted.
+  - Declarative layout when `opts.toolbar` is provided.
+- Declarative toolbar supports:
+  - explicit groups and order,
+  - per-item display mode: `label`, `icon`, `icon-label`,
+  - dropdown menus,
+  - entries bound to registered actions and custom inline async `run(api, state, args?)` handlers.
+- Runtime toolbar APIs in `EditorCore`:
+  - `getToolbarConfig`, `setToolbarConfig`, `updateToolbarConfig`,
+  - `upsert/remove` helpers for groups, items, and dropdown entries.
+- Dropdown UX stability:
+  - CSS hover bridge between trigger and menu,
+  - delayed close logic (160ms) with cancellation on pointer/focus re-entry,
+  - click/focus support remains enabled.
+
 ## draw.io Snapshot (Current)
 - Markdown serialization for draw.io is now one-line only:
   - `![draw.io](image-src){uri-encoded-xml}`
@@ -109,4 +126,4 @@ Use this project context and instruction files as the source of truth. Before ma
 
 ## Last Updated
 - Date: 2026-03-21
-- Reason: added code-preview-display feature set (payload collapsing, diff modal scroll fix, split scroll sync)
+- Reason: added toolbar customization/runtime API and dropdown UX stability improvements
