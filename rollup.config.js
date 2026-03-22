@@ -34,20 +34,20 @@ export default {
   input: 'src/index.js',
   output: [
     {
-      file: 'dist/md-editor.esm.js',
+      file: 'dist/smart-editor.esm.js',
       format: 'esm',
       sourcemap: true,
     },
     {
-      file: 'dist/md-editor.cjs.js',
+      file: 'dist/smart-editor.cjs.js',
       format: 'cjs',
       sourcemap: true,
       exports: 'named',
     },
     {
-      file: 'dist/md-editor.iife.js',
+      file: 'dist/smart-editor.iife.js',
       format: 'iife',
-      name: 'MdEditor',
+      name: 'SmartEditor',
       sourcemap: true,
     },
   ],

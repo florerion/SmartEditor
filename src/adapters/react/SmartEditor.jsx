@@ -5,13 +5,13 @@ import { createEditor } from '../../index.js';
  * React wrapper for the vanilla editor.
  *
  * @example
- * <MdEditor
+ * <SmartEditor
  *   value="# Hello"
  *   options={{ mode: 'split' }}
  *   onReady={(editor) => console.log(editor)}
  * />
  */
-export function MdEditor({ value = '', options = {}, onReady, className, style }) {
+export function SmartEditor({ value = '', options = {}, onReady, className, style }) {
   const rootRef = useRef(null);
   const editorRef = useRef(null);
 

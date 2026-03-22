@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
   "type": "module",
-  "main": "dist/md-editor.cjs.js",
-  "module": "dist/md-editor.esm.js",
-  "browser": "dist/md-editor.iife.js",
+  "main": "dist/smart-editor.cjs.js",
+  "module": "dist/smart-editor.esm.js",
+  "browser": "dist/smart-editor.iife.js",
   "exports": {
     ".": {
-      "import": "./dist/md-editor.esm.js",
-      "require": "./dist/md-editor.cjs.js"
+      "import": "./dist/smart-editor.esm.js",
+      "require": "./dist/smart-editor.cjs.js"
     }
   },
   "files": ["dist"],

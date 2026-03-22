@@ -4,16 +4,16 @@
  * Exports:
  *  - createEditor(element, options)  Factory function (plain-JS path)
  *  - EditorCore                      Class for advanced usage
- *  - MdEditorElement                 <md-editor> Custom Element class
+ *  - SmartEditorElement              <smart-editor> Custom Element class
  *
  * The Web Component is registered as a side-effect of this import:
- *   customElements.define('md-editor', MdEditorElement)
+ *   customElements.define('smart-editor', SmartEditorElement)
  *
  * @module md-wysiwyg-editor
  */
 
 export { EditorCore } from './core/EditorCore.js';
-export { MdEditorElement } from './adapters/WebComponent.js';
+export { SmartEditorElement } from './adapters/WebComponent.js';
 import { EditorCore as _EditorCore } from './core/EditorCore.js';
 
 /**
@@ -38,7 +38,7 @@ export function createEditor(element, options = {}) {
     ? document.querySelector(element)
     : element;
 
-  if (!el) throw new Error(`[md-editor] Element not found: ${element}`);
+  if (!el) throw new Error(`[smart-editor] Element not found: ${element}`);
 
   return new _EditorCore(el, options);
 }

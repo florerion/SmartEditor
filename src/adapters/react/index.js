@@ -1,1 +1,1 @@
-export { MdEditor } from './MdEditor.jsx';
+export { SmartEditor } from './SmartEditor.jsx';

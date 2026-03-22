@@ -1,7 +1,7 @@
 import { EditorCore } from '../core/EditorCore.js';
 
 /**
- * <md-editor> Custom Element.
+ * <smart-editor> Custom Element.
  *
  * Attributes (all optional):
  *   value   Initial markdown content
@@ -16,14 +16,14 @@ import { EditorCore } from '../core/EditorCore.js';
  * All EditorCore public methods are proxied directly on the element.
  *
  * @example
- * <md-editor value="# Hello" mode="split" style="height:500px"></md-editor>
+ * <smart-editor value="# Hello" mode="split" style="height:500px"></smart-editor>
  * <script>
- *   document.querySelector('md-editor').addEventListener('mde-change', e => {
+ *   document.querySelector('smart-editor').addEventListener('mde-change', e => {
  *     console.log(e.detail.markdown);
  *   });
  * </script>
  */
-export class MdEditorElement extends HTMLElement {
+export class SmartEditorElement extends HTMLElement {
   static get observedAttributes() {
     return ['value', 'mode', 'theme'];
   }
@@ -99,6 +99,6 @@ export class MdEditorElement extends HTMLElement {
   destroy()                 { this._editor?.destroy(); this._editor = null; }
 }
 
-if (!customElements.get('md-editor')) {
-  customElements.define('md-editor', MdEditorElement);
+if (!customElements.get('smart-editor')) {
+  customElements.define('smart-editor', SmartEditorElement);
 }
