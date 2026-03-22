@@ -32,40 +32,40 @@ function _showTableDialog(api) {
   _removeExisting();
 
   const overlay = document.createElement('div');
-  overlay.id = 'mde-table-dialog';
-  overlay.className = 'mde-dialog-overlay';
+  overlay.id = 'se-table-dialog';
+  overlay.className = 'se-dialog-overlay';
   overlay.setAttribute('role', 'presentation');
 
   overlay.innerHTML = `
-    <div class="mde-dialog" role="dialog" aria-modal="true" aria-label="Insert table">
-      <h3 class="mde-dialog__title">Insert table</h3>
-      <div class="mde-dialog__body">
-        <label class="mde-dialog__label">
+    <div class="se-dialog" role="dialog" aria-modal="true" aria-label="Insert table">
+      <h3 class="se-dialog__title">Insert table</h3>
+      <div class="se-dialog__body">
+        <label class="se-dialog__label">
           Rows
-          <input type="number" id="mde-tbl-rows" value="3" min="1" max="50" class="mde-dialog__input">
+          <input type="number" id="se-tbl-rows" value="3" min="1" max="50" class="se-dialog__input">
         </label>
-        <label class="mde-dialog__label">
+        <label class="se-dialog__label">
           Columns
-          <input type="number" id="mde-tbl-cols" value="3" min="1" max="20" class="mde-dialog__input">
+          <input type="number" id="se-tbl-cols" value="3" min="1" max="20" class="se-dialog__input">
         </label>
       </div>
-      <div class="mde-dialog__footer">
-        <button class="mde-dialog__btn mde-dialog__btn--cancel" type="button">Cancel</button>
-        <button class="mde-dialog__btn mde-dialog__btn--ok"     type="button">Insert</button>
+      <div class="se-dialog__footer">
+        <button class="se-dialog__btn se-dialog__btn--cancel" type="button">Cancel</button>
+        <button class="se-dialog__btn se-dialog__btn--ok"     type="button">Insert</button>
       </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  const rowsInput = overlay.querySelector('#mde-tbl-rows');
-  const colsInput = overlay.querySelector('#mde-tbl-cols');
+  const rowsInput = overlay.querySelector('#se-tbl-rows');
+  const colsInput = overlay.querySelector('#se-tbl-cols');
   rowsInput.focus();
   rowsInput.select();
 
   const close = () => overlay.remove();
 
-  overlay.querySelector('.mde-dialog__btn--cancel').addEventListener('click', close);
+  overlay.querySelector('.se-dialog__btn--cancel').addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 
@@ -76,12 +76,12 @@ function _showTableDialog(api) {
     api.insertText('\n' + _generateTable(rows, cols) + '\n');
   };
 
-  overlay.querySelector('.mde-dialog__btn--ok').addEventListener('click', doInsert);
+  overlay.querySelector('.se-dialog__btn--ok').addEventListener('click', doInsert);
   overlay.addEventListener('keydown', (e) => { if (e.key === 'Enter') doInsert(); });
 }
 
 function _removeExisting() {
-  document.getElementById('mde-table-dialog')?.remove();
+  document.getElementById('se-table-dialog')?.remove();
 }
 
 /**

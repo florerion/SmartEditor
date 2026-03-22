@@ -42,6 +42,13 @@
     }
     .controls button:hover { background: #f0f7ff; border-color: #3b82f6; }
 
+    .controls-hint {
+      width: 100%;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #4b5563;
+    }
+
     #editor-container {
       width: 100%;
       height: calc(100vh - 90px);
@@ -74,12 +81,15 @@
       <button onclick="logMd()">getMarkdown()</button>
       <button onclick="doSet()">setMarkdown()</button>
       <button onclick="doInsert()">insertText()</button>
-      <button onclick="doPropose()">proposeChange()</button>
+      <button onclick="doProposeAll()">propose: replace-all</button>
+      <button onclick="doProposeSelection()">propose: replace-selection</button>
+      <button onclick="doProposeCursor()">propose: insert-at-cursor</button>
       <button onclick="doRegister()">registerAction()</button>
       <button onclick="addTemplate()">addTemplate()</button>
       <button onclick="removeTemplate()">removeTemplate()</button>
       <button onclick="toggleMode()">toggleMode()</button>
       <button onclick="toggleTheme()">toggleTheme()</button>
+      <div class="controls-hint">Hint: zaznacz fragment tekstu przed <code>replace-selection</code>; bez zaznaczenia tryb zrobi fallback do <code>insert-at-cursor</code>.</div>
     </div>
   </header>
 
@@ -314,9 +324,19 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       log('insertText() wywołane');
     };
 
-    window.doPropose = () => {
-      editor.proposeChange('# Propozycja od chatbota\n\nTen tekst pochodzi z `proposeChange()` API.\n\nTo okno pokazuje teraz diff i wymaga akceptacji.\n');
-      log('proposeChange() wywołane');
+    window.doProposeAll = () => {
+      editor.proposeChange('# Propozycja od chatbota\n\nTen tekst pochodzi z `proposeChange()` API.\n\nTryb: `replace-all`.\n', { mode: 'replace-all' });
+      log('proposeChange() — mode=replace-all');
+    };
+
+    window.doProposeSelection = () => {
+      editor.proposeChange('<< ZASTAPIENIE ZAZNACZENIA >', { mode: 'replace-selection' });
+      log('proposeChange() — mode=replace-selection (bez zaznaczenia: fallback do insert-at-cursor)');
+    };
+
+    window.doProposeCursor = () => {
+      editor.proposeChange(' [WSTAWKA W MIEJSCU KURSORA] ', { mode: 'insert-at-cursor' });
+      log('proposeChange() — mode=insert-at-cursor');
     };
 
     let customRegistered = false;

@@ -9,16 +9,16 @@ import { EditorCore } from '../core/EditorCore.js';
  *   theme   'light' | 'dark' | 'auto'      (default: 'auto')
  *
  * DOM Events emitted:
- *   mde-change           CustomEvent({ detail: { markdown, tokens, html } })
- *   mde-selection-change CustomEvent({ detail: selInfo })
- *   mde-preview-click    CustomEvent({ detail: { element, lineRange } })
+ *   se-change           CustomEvent({ detail: { markdown, tokens, html } })
+ *   se-selection-change CustomEvent({ detail: selInfo })
+ *   se-preview-click    CustomEvent({ detail: { element, lineRange } })
  *
  * All EditorCore public methods are proxied directly on the element.
  *
  * @example
  * <smart-editor value="# Hello" mode="split" style="height:500px"></smart-editor>
  * <script>
- *   document.querySelector('smart-editor').addEventListener('mde-change', e => {
+ *   document.querySelector('smart-editor').addEventListener('se-change', e => {
  *     console.log(e.detail.markdown);
  *   });
  * </script>
@@ -43,21 +43,21 @@ export class SmartEditorElement extends HTMLElement {
       theme: this.getAttribute('theme') ?? 'auto',
 
       onChange: (markdown, tokens, html) => {
-        this.dispatchEvent(new CustomEvent('mde-change', {
+        this.dispatchEvent(new CustomEvent('se-change', {
           bubbles: true, composed: true,
           detail: { markdown, tokens, html },
         }));
       },
 
       onSelectionChange: (selInfo) => {
-        this.dispatchEvent(new CustomEvent('mde-selection-change', {
+        this.dispatchEvent(new CustomEvent('se-selection-change', {
           bubbles: true, composed: true,
           detail: selInfo,
         }));
       },
 
       onPreviewClick: (element, lineRange) => {
-        this.dispatchEvent(new CustomEvent('mde-preview-click', {
+        this.dispatchEvent(new CustomEvent('se-preview-click', {
           bubbles: true, composed: true,
           detail: { element, lineRange },
         }));
@@ -90,7 +90,7 @@ export class SmartEditorElement extends HTMLElement {
   unregisterAction(id)      { this._editor?.unregisterAction(id); }
   runCommand(id, args)      { return this._editor?.runCommand(id, args); }
   openDrawioEditor(opts)     { return this._editor?.openDrawioEditor(opts); }
-  proposeChange(md)         { return this._editor?.proposeChange(md); }
+  proposeChange(md, opts)   { return this._editor?.proposeChange(md, opts); }
   undo()                    { this._editor?.undo(); }
   redo()                    { this._editor?.redo(); }
   focus()                   { this._editor?.focus(); }

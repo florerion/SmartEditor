@@ -38,27 +38,27 @@ export class DrawioModal {
     this._fallbackUsed = false;
 
     this._overlay = document.createElement('div');
-    this._overlay.className = 'mde-drawio-overlay';
+    this._overlay.className = 'se-drawio-overlay';
     this._overlay.innerHTML = `
-      <div class="mde-drawio-modal" role="dialog" aria-modal="true" aria-label="draw.io editor">
-        <div class="mde-drawio-modal__header">
-          <h3 class="mde-drawio-modal__title">draw.io</h3>
-          <button type="button" class="mde-drawio-modal__close" data-mde-drawio-close aria-label="Close">×</button>
+      <div class="se-drawio-modal" role="dialog" aria-modal="true" aria-label="draw.io editor">
+        <div class="se-drawio-modal__header">
+          <h3 class="se-drawio-modal__title">draw.io</h3>
+          <button type="button" class="se-drawio-modal__close" data-se-drawio-close aria-label="Close">×</button>
         </div>
-        <div class="mde-drawio-modal__frame-wrap"></div>
+        <div class="se-drawio-modal__frame-wrap"></div>
       </div>
     `;
 
     this._iframe = document.createElement('iframe');
-    this._iframe.className = 'mde-drawio-modal__frame';
+    this._iframe.className = 'se-drawio-modal__frame';
     this._iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
     this._iframe.addEventListener('error', this._boundIframeError);
 
-    this._overlay.querySelector('.mde-drawio-modal__frame-wrap').appendChild(this._iframe);
+    this._overlay.querySelector('.se-drawio-modal__frame-wrap').appendChild(this._iframe);
 
     this._overlay.addEventListener('click', (e) => {
       if (e.target === this._overlay) this.close(null);
-      if (e.target.closest('[data-mde-drawio-close]')) this.close(null);
+      if (e.target.closest('[data-se-drawio-close]')) this.close(null);
     });
 
     document.body.appendChild(this._overlay);

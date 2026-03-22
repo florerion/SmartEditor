@@ -7,6 +7,15 @@ Purpose: portable project context for switching machines/accounts/subscriptions.
 - Workspace root: `c:\projects\md-wysiwyg-editor`
 - GitHub remote mentioned in repo memory: `florerion/SmartEditor`
 
+## Naming Snapshot (Current)
+- Web Component tag: `<smart-editor>`
+- Public class export: `SmartEditorElement`
+- React adapter component: `SmartEditor` in `src/adapters/react/SmartEditor.jsx`
+- Bundle outputs: `dist/smart-editor.{esm,cjs,iife}.js`
+- UI class prefix: `se-*` (legacy `mde-*` class names removed)
+- CSS custom properties: `--se-*` (legacy `--mde-*` removed)
+- Web Component events: `se-change`, `se-selection-change`, `se-preview-click`
+
 ## What This Project Is
 Framework-agnostic Markdown editor with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, and code-preview source-line synchronization.
 
@@ -86,8 +95,8 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 
 ### Diff modal scroll fix
 - `editor.proposeChange()` diff modal: long content is now scrollable.
-- Fix: added `overflow: hidden` to `.mde-diff__body` and `min-height: 0` to `.mde-diff__col`
-  and `.mde-diff__pre` in `src/styles/editorStyles.js`.
+- Fix: added `overflow: hidden` to `.se-diff__body` and `min-height: 0` to `.se-diff__col`
+  and `.se-diff__pre` in `src/styles/editorStyles.js`.
 
 ### Split-mode bidirectional scroll sync
 - New option: `opts.scrollSync` (default `true`); active only in `mode === 'split'`, Y-axis only.
@@ -101,6 +110,26 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Key methods added to `Sync.js`: `scrollPreviewToLine`, `getTopPreviewLine`.
 - Key methods added to `CodePanel`: `getTopVisibleLine`, `scrollViewportToLine`, `onScroll` callback.
 - Key method added to `PreviewPanel`: `onScroll` callback.
+
+## Propose Change Extension (branch: propose-extension)
+- `EditorCore.proposeChange(newMarkdown, { mode })` now supports:
+  - `replace-all`
+  - `replace-selection`
+  - `insert-at-cursor`
+- Behavior rules:
+  - `replace-selection` with empty selection falls back to `insert-at-cursor`.
+  - Cursor insertion uses `selection.to` (end of current selection/cursor).
+- Diff modal now compares full-document snapshots and highlights the target replacement range:
+  - red-highlight in current document,
+  - green-highlight in proposed document,
+  - cursor marker for insert mode.
+- Files involved:
+  - `src/core/EditorCore.js`
+  - `src/ui/DiffModal.js`
+  - `src/styles/editorStyles.js`
+  - `src/adapters/WebComponent.js`
+  - `README.md`
+  - `demo/index.html`
 
 ## Build And Validation
 - Install deps: `npm install`
@@ -125,5 +154,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-21
-- Reason: added toolbar customization/runtime API and dropdown UX stability improvements
+- Date: 2026-03-22
+- Reason: finalized breaking rename migration to `se-*` naming (classes, CSS vars, and web-component events) and preserved `proposeChange` mode extension context

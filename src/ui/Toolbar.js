@@ -24,7 +24,7 @@ export class Toolbar {
     this._boundDocumentPointerDown = this._handleDocumentPointerDown.bind(this);
     this._boundDocumentKeydown = this._handleDocumentKeydown.bind(this);
 
-    this._container.classList.add('mde-toolbar');
+    this._container.classList.add('se-toolbar');
     this._container.setAttribute('role', 'toolbar');
 
     document.addEventListener('pointerdown', this._boundDocumentPointerDown);
@@ -126,7 +126,7 @@ export class Toolbar {
       const anyActive = interactiveChildren.some((entry) => entry.active === true);
 
       dropdown.trigger.disabled = !anyEnabled;
-      dropdown.trigger.classList.toggle('mde-toolbar__btn--active', anyActive);
+      dropdown.trigger.classList.toggle('se-toolbar__btn--active', anyActive);
       dropdown.trigger.setAttribute('aria-expanded', String(this._openDropdownId === dropdown.id));
     });
   }
@@ -154,7 +154,7 @@ export class Toolbar {
 
     groups.forEach((group, groupIndex) => {
       const groupEl = document.createElement('div');
-      groupEl.className = 'mde-toolbar__group';
+      groupEl.className = 'se-toolbar__group';
 
       group.items.forEach((item, itemIndex) => {
         const element = this._createLayoutItem(item, `${group.id}:${item.id ?? itemIndex}`);
@@ -165,7 +165,7 @@ export class Toolbar {
 
       if (appendedGroups > 0 && groupIndex >= 0) {
         const sep = document.createElement('span');
-        sep.className = 'mde-toolbar__sep';
+        sep.className = 'se-toolbar__sep';
         sep.setAttribute('aria-hidden', 'true');
         this._container.appendChild(sep);
       }
@@ -252,12 +252,12 @@ export class Toolbar {
     const display = item.display ?? this._inferDisplayMode({ icon, label });
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'mde-toolbar__dropdown';
+    wrapper.className = 'se-toolbar__dropdown';
     wrapper.dataset.dropdownId = dropdownId;
 
     const trigger = document.createElement('button');
     trigger.type = 'button';
-    trigger.className = 'mde-toolbar__btn mde-toolbar__btn--dropdown';
+    trigger.className = 'se-toolbar__btn se-toolbar__btn--dropdown';
     trigger.dataset.dropdownTrigger = dropdownId;
     trigger.setAttribute('aria-haspopup', 'menu');
     trigger.setAttribute('aria-expanded', 'false');
@@ -266,7 +266,7 @@ export class Toolbar {
     this._setButtonContent(trigger, { icon, label, display, fallbackText: label, chevron: true });
 
     const menu = document.createElement('div');
-    menu.className = 'mde-toolbar__menu';
+    menu.className = 'se-toolbar__menu';
     menu.setAttribute('role', 'menu');
 
     const entries = item.items
@@ -372,7 +372,7 @@ export class Toolbar {
   _createInteractiveButton(definition, { menu }) {
     const element = document.createElement('button');
     element.type = 'button';
-    element.className = menu ? 'mde-toolbar__menu-item' : 'mde-toolbar__btn';
+    element.className = menu ? 'se-toolbar__menu-item' : 'se-toolbar__btn';
     element.dataset.toolbarItemId = definition.id;
 
     const tooltip = [definition.title ?? definition.label ?? definition.id, definition.shortcut]
@@ -401,7 +401,7 @@ export class Toolbar {
     this._renderedEntries.push({
       element,
       definition,
-      activeClass: menu ? 'mde-toolbar__menu-item--active' : 'mde-toolbar__btn--active',
+      activeClass: menu ? 'se-toolbar__menu-item--active' : 'se-toolbar__btn--active',
       pressed: !menu,
       current: menu,
       enabled: true,
@@ -420,7 +420,7 @@ export class Toolbar {
 
     if (showIcon) {
       const iconEl = document.createElement('span');
-      iconEl.className = 'mde-toolbar__icon';
+      iconEl.className = 'se-toolbar__icon';
       iconEl.setAttribute('aria-hidden', 'true');
       iconEl.innerHTML = icon;
       element.appendChild(iconEl);
@@ -428,14 +428,14 @@ export class Toolbar {
 
     if (showLabel || !showIcon) {
       const labelEl = document.createElement('span');
-      labelEl.className = 'mde-toolbar__label';
+      labelEl.className = 'se-toolbar__label';
       labelEl.textContent = label ?? fallbackText;
       element.appendChild(labelEl);
     }
 
     if (chevron) {
       const chevronEl = document.createElement('span');
-      chevronEl.className = 'mde-toolbar__chevron';
+      chevronEl.className = 'se-toolbar__chevron';
       chevronEl.setAttribute('aria-hidden', 'true');
       chevronEl.textContent = '▾';
       element.appendChild(chevronEl);
@@ -500,7 +500,7 @@ export class Toolbar {
   _syncDropdownState() {
     this._dropdownEntries.forEach((dropdown) => {
       const isOpen = dropdown.id === this._openDropdownId;
-      dropdown.wrapper.classList.toggle('mde-toolbar__dropdown--open', isOpen);
+      dropdown.wrapper.classList.toggle('se-toolbar__dropdown--open', isOpen);
       dropdown.trigger.setAttribute('aria-expanded', String(isOpen));
     });
   }

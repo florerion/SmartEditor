@@ -1,5 +1,5 @@
 /**
- * Attaches resize handles to <img class="mde-image"> elements in the preview panel.
+ * Attaches resize handles to <img class="se-image"> elements in the preview panel.
  *
  * UX:
  *  - Hover over image → a small drag-handle appears in the bottom-right corner.
@@ -37,7 +37,7 @@ export class ImageResize {
    * Call after each preview re-render to re-attach hover listeners to new <img> elements.
    */
   attachHandlers() {
-    this._previewEl.querySelectorAll('img.mde-image').forEach(img => {
+    this._previewEl.querySelectorAll('img.se-image').forEach(img => {
       img.style.cursor = 'default';
       img.addEventListener('mouseenter', () => this._showHandle(img));
       img.addEventListener('mouseleave', () => this._scheduleHideHandle());
@@ -54,7 +54,7 @@ export class ImageResize {
 
   _createHandle() {
     const el = document.createElement('div');
-    el.className = 'mde-img-resize-handle';
+    el.className = 'se-img-resize-handle';
     el.title = 'Drag to resize image';
     el.style.display = 'none';
     document.body.appendChild(el);

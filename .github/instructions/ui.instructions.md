@@ -16,3 +16,8 @@ applyTo: "src/ui/**"
 	- declarative mode should follow explicit `toolbar.groups/items` order only.
 - Preserve dropdown UX safeguards in `Toolbar` (hover bridge + delayed close + click/focus support); avoid immediate close on transient pointer gaps.
 - Ensure every component that attaches listeners/timers cleans them in `destroy()`.
+- For `DiffModal` used by `proposeChange`, preserve full-document comparison with explicit highlight ranges for replaced/inserted content and cursor marker rendering for insert mode previews.
+- Keep UI naming consistent with current conventions:
+	- classes/selectors use `se-*`,
+	- style variables use `--se-*`,
+	- do not introduce new `mde-*` class/variable names.
