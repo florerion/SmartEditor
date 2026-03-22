@@ -15,7 +15,7 @@ export class PreviewPanel {
     this._container = container;
     this._onElementClick = opts.onElementClick ?? (() => {});
     this._onScroll = opts.onScroll ?? (() => {});
-    this._container.classList.add('mde-preview');
+    this._container.classList.add('se-preview');
     this._boundClick = this._handleClick.bind(this);
     this._boundScroll = this._handleScroll.bind(this);
     this._container.addEventListener('click', this._boundClick);
@@ -60,8 +60,8 @@ export class PreviewPanel {
   /** Remove all active sync highlights. */
   clearHighlight() {
     this._container
-      .querySelectorAll('.mde-sync-highlight')
-      .forEach(el => el.classList.remove('mde-sync-highlight'));
+      .querySelectorAll('.se-sync-highlight')
+      .forEach(el => el.classList.remove('se-sync-highlight'));
   }
 
   destroy() {

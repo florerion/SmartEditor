@@ -9,7 +9,7 @@ import MarkdownIt from 'markdown-it';
  *  - Table-cell column tracking (`data-source-col`) for cell-level sync.
  *  - Image `|WxH` alt-text parsing — stores resize info in alt, renders as
  *    `<img width="W" height="H">`.
- *  - Mermaid fenced blocks rendered as `<div class="mde-mermaid" data-code="...">`.
+ *  - Mermaid fenced blocks rendered as `<div class="se-mermaid" data-code="...">`.
  *  - Block math `$$...$$` and inline math `$...$` rendered as placeholder elements
  *    with `data-tex` — KaTeX renders them in a post-render step in EditorCore.
  */
@@ -135,12 +135,12 @@ export class Parser {
       const lineAttrs = t.map
         ? ` data-source-line="${t.map[0]}" data-source-line-end="${t.map[1] - 1}"`
         : '';
-      return `<div class="mde-math-block"${lineAttrs} data-tex="${encodeURIComponent(t.content)}"></div>\n`;
+      return `<div class="se-math-block"${lineAttrs} data-tex="${encodeURIComponent(t.content)}"></div>\n`;
     };
 
     md.renderer.rules.math_inline = (tokens, idx) => {
       const t = tokens[idx];
-      return `<span class="mde-math-inline" data-tex="${encodeURIComponent(t.content)}"></span>`;
+      return `<span class="se-math-inline" data-tex="${encodeURIComponent(t.content)}"></span>`;
     };
   }
 
@@ -174,7 +174,7 @@ export class Parser {
         ? ` data-source-line="${token.map[0]}" data-source-line-end="${token.map[1] - 1}"`
         : '';
 
-      return `<img class="mde-drawio" data-mde-drawio-open data-drawio="${this._escAtt(encodedPayload)}"${lineAttrs} src="${this._escAtt(imageSrc)}" alt="draw.io diagram" loading="lazy">\n`;
+      return `<img class="se-drawio" data-se-drawio-open data-drawio="${this._escAtt(encodedPayload)}"${lineAttrs} src="${this._escAtt(imageSrc)}" alt="draw.io diagram" loading="lazy">\n`;
     };
   }
 
@@ -251,7 +251,7 @@ export class Parser {
       const m = alt.match(/^([\s\S]*)\|(\d+)x(\d+)$/);
       if (m) { alt = m[1]; width = m[2]; height = m[3]; }
 
-      let attrs = `src="${this._escAtt(src)}" alt="${this._escAtt(alt)}" class="mde-image"`;
+      let attrs = `src="${this._escAtt(src)}" alt="${this._escAtt(alt)}" class="se-image"`;
       if (title)  attrs += ` title="${this._escAtt(title)}"`;
       if (width)  attrs += ` width="${width}"`;
       if (height) attrs += ` height="${height}"`;
@@ -278,8 +278,8 @@ export class Parser {
           : '';
         const encoded = encodeURIComponent(token.content);
         return (
-          `<div class="mde-mermaid"${lineAttrs} data-code="${encoded}">` +
-          `<pre class="mde-mermaid__fallback"><code>${this._esc(token.content)}</code></pre>` +
+          `<div class="se-mermaid"${lineAttrs} data-code="${encoded}">` +
+          `<pre class="se-mermaid__fallback"><code>${this._esc(token.content)}</code></pre>` +
           `</div>\n`
         );
       }

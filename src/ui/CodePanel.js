@@ -36,7 +36,7 @@ const COLLAPSE_TAIL = 5;
 class CollapseWidget extends WidgetType {
   toDOM() {
     const span = document.createElement('span');
-    span.className = 'cm-mde-collapse-widget';
+    span.className = 'cm-se-collapse-widget';
     span.textContent = '[...]';
     span.title = 'Long payload visually collapsed';
     return span;
@@ -336,12 +336,12 @@ export class CodePanel {
           '&': {
             height: '100%',
             fontSize: '14px',
-            fontFamily: 'var(--mde-font-mono, "Fira Code","Cascadia Code",Consolas,monospace)',
+            fontFamily: 'var(--se-font-mono, "Fira Code","Cascadia Code",Consolas,monospace)',
           },
           '.cm-scroller': { overflow: 'auto' },
           '.cm-content': { padding: '8px 0' },
-          '.cm-mde-collapse-widget': {
-            color: 'var(--mde-color-muted, #6b7280)',
+          '.cm-se-collapse-widget': {
+            color: 'var(--se-color-muted, #6b7280)',
             fontStyle: 'italic',
             userSelect: 'none',
           },

@@ -13,7 +13,7 @@ import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { registerDefaultActions } from '../plugins/index.js';
 import { ImageUploadHandler, createImageUploadAction } from '../plugins/imageUpload.js';
 
-const STYLE_TAG_ID = 'mde-global-styles';
+const STYLE_TAG_ID = 'se-global-styles';
 
 /**
  * Main orchestrator.
@@ -385,16 +385,75 @@ export class EditorCore {
    * Shows diff modal and applies on confirmation.
    *
    * @param {string} newMarkdown
+   * @param {object} [opts]
+   * @param {'replace-all'|'replace-selection'|'insert-at-cursor'} [opts.mode='replace-all']
    * @returns {Promise<boolean>} true => applied, false => rejected
+   *
+   * @example
+   * await editor.proposeChange('## Updated content', { mode: 'replace-selection' });
+   *
+   * @throws {Error} If `opts.mode` is not supported
    */
-  async proposeChange(newMarkdown) {
+  async proposeChange(newMarkdown, opts = {}) {
     const current = this.getMarkdown();
-    const accepted = await this._diffModal.open(current, newMarkdown);
+    const selection = this.getSelection();
+    const requestedMode = opts.mode ?? 'replace-all';
+    const mode = requestedMode === 'replace-selection' && selection.from === selection.to
+      ? 'insert-at-cursor'
+      : requestedMode;
+
+    if (!['replace-all', 'replace-selection', 'insert-at-cursor'].includes(mode)) {
+      throw new Error(`[EditorCore] Unsupported proposeChange mode: ${mode}`);
+    }
+
+    const candidate = this._buildProposedDocument(current, newMarkdown, mode, selection);
+    const accepted = await this._diffModal.open(current, candidate.nextDocument, {
+      title: `Proposed Change (${mode})`,
+      oldLabel: 'Current Document',
+      newLabel: 'Proposed Document',
+      oldHighlight: candidate.oldHighlight,
+      newHighlight: candidate.newHighlight,
+    });
+
     if (accepted) {
-      this.setMarkdown(newMarkdown);
+      if (mode === 'replace-all') {
+        this.setMarkdown(newMarkdown);
+      } else if (mode === 'replace-selection') {
+        this.setSelection(selection.from, selection.to);
+        this.replaceSelection(newMarkdown);
+      } else {
+        this.insertText(newMarkdown, selection.to);
+      }
       return true;
     }
     return false;
+  }
+
+  _buildProposedDocument(current, nextChunk, mode, selection) {
+    if (mode === 'replace-all') {
+      return {
+        nextDocument: nextChunk,
+        oldHighlight: { from: 0, to: current.length },
+        newHighlight: { from: 0, to: nextChunk.length },
+      };
+    }
+
+    if (mode === 'replace-selection') {
+      const nextDocument = `${current.slice(0, selection.from)}${nextChunk}${current.slice(selection.to)}`;
+      return {
+        nextDocument,
+        oldHighlight: { from: selection.from, to: selection.to },
+        newHighlight: { from: selection.from, to: selection.from + nextChunk.length },
+      };
+    }
+
+    const insertAt = selection.to;
+    const nextDocument = `${current.slice(0, insertAt)}${nextChunk}${current.slice(insertAt)}`;
+    return {
+      nextDocument,
+      oldHighlight: { from: insertAt, to: insertAt, cursor: true },
+      newHighlight: { from: insertAt, to: insertAt + nextChunk.length },
+    };
   }
 
   /** Detach editor and clean up resources. */
@@ -415,7 +474,7 @@ export class EditorCore {
     this._previewPanelEl?.removeEventListener('click', this._boundPreviewAction);
 
     this._root.innerHTML = '';
-    ['mde-editor', 'mde-mode-split', 'mde-mode-code', 'mde-mode-preview', 'mde-mode-wysiwyg']
+    ['se-editor', 'se-mode-split', 'se-mode-code', 'se-mode-preview', 'se-mode-wysiwyg']
       .forEach(c => this._root.classList.remove(c));
   }
 
@@ -432,26 +491,26 @@ export class EditorCore {
   }
 
   _buildDOM() {
-    this._root.classList.add('mde-editor');
+    this._root.classList.add('se-editor');
     if (this._opts.theme && this._opts.theme !== 'auto') {
       this._root.setAttribute('data-theme', this._opts.theme);
     }
 
     this._root.innerHTML = `
-      <div class="mde-layout">
-        <div class="mde-toolbar-container"></div>
-        <div class="mde-wysiwyg-beta">WYSIWYG beta: visual mode is preview-first in this build.</div>
-        <div class="mde-panels">
-          <div class="mde-panel mde-panel--code"></div>
-          <div class="mde-divider" title="Drag to resize panels"></div>
-          <div class="mde-panel mde-panel--preview"></div>
+      <div class="se-layout">
+        <div class="se-toolbar-container"></div>
+        <div class="se-wysiwyg-beta">WYSIWYG beta: visual mode is preview-first in this build.</div>
+        <div class="se-panels">
+          <div class="se-panel se-panel--code"></div>
+          <div class="se-divider" title="Drag to resize panels"></div>
+          <div class="se-panel se-panel--preview"></div>
         </div>
       </div>
     `;
 
-    this._toolbarContainer = this._root.querySelector('.mde-toolbar-container');
-    this._codePanelEl = this._root.querySelector('.mde-panel--code');
-    this._previewPanelEl = this._root.querySelector('.mde-panel--preview');
+    this._toolbarContainer = this._root.querySelector('.se-toolbar-container');
+    this._codePanelEl = this._root.querySelector('.se-panel--code');
+    this._previewPanelEl = this._root.querySelector('.se-panel--preview');
 
     this._applyMode();
     this._setupDividerResize();
@@ -511,7 +570,7 @@ export class EditorCore {
     );
 
     this._boundPreviewAction = async (event) => {
-      const trigger = event.target.closest('[data-mde-drawio-open]');
+      const trigger = event.target.closest('[data-se-drawio-open]');
       if (!trigger) return;
 
       event.preventDefault();
@@ -568,7 +627,7 @@ export class EditorCore {
   }
 
   _renderMath() {
-    this._previewPanelEl.querySelectorAll('.mde-math-inline').forEach(el => {
+    this._previewPanelEl.querySelectorAll('.se-math-inline').forEach(el => {
       const tex = decodeURIComponent(el.getAttribute('data-tex') ?? '');
       try {
         el.innerHTML = katex.renderToString(tex, { throwOnError: false, displayMode: false });
@@ -577,7 +636,7 @@ export class EditorCore {
       }
     });
 
-    this._previewPanelEl.querySelectorAll('.mde-math-block').forEach(el => {
+    this._previewPanelEl.querySelectorAll('.se-math-block').forEach(el => {
       const tex = decodeURIComponent(el.getAttribute('data-tex') ?? '');
       try {
         el.innerHTML = katex.renderToString(tex, { throwOnError: false, displayMode: true });
@@ -592,14 +651,14 @@ export class EditorCore {
     if (!mermaid) return;
 
     this._previewPanelEl
-      .querySelectorAll('.mde-mermaid:not(.mde-mermaid--rendered)')
+      .querySelectorAll('.se-mermaid:not(.se-mermaid--rendered)')
       .forEach(async (el, idx) => {
         const code = decodeURIComponent(el.getAttribute('data-code') ?? '');
         try {
-          const id = `mde-mermaid-${Date.now()}-${idx}`;
+          const id = `se-mermaid-${Date.now()}-${idx}`;
           const { svg } = await mermaid.render(id, code);
           el.innerHTML = svg;
-          el.classList.add('mde-mermaid--rendered');
+          el.classList.add('se-mermaid--rendered');
         } catch (e) {
           console.warn('[EditorCore] mermaid render error:', e);
         }
@@ -669,9 +728,9 @@ export class EditorCore {
 
   _applyMode() {
     ['split', 'code', 'preview', 'wysiwyg'].forEach(m =>
-      this._root.classList.remove(`mde-mode-${m}`),
+      this._root.classList.remove(`se-mode-${m}`),
     );
-    this._root.classList.add(`mde-mode-${this._mode}`);
+    this._root.classList.add(`se-mode-${this._mode}`);
     if (!this._isScrollSyncActive()) {
       this._scrollSyncSource = null;
     }
@@ -732,10 +791,10 @@ export class EditorCore {
   }
 
   _setupDividerResize() {
-    const divider = this._root.querySelector('.mde-divider');
+    const divider = this._root.querySelector('.se-divider');
     if (!divider) return;
 
-    const panels = this._root.querySelector('.mde-panels');
+    const panels = this._root.querySelector('.se-panels');
     let dragging = false;
     let startX = 0;
     let startWidth = 0;
@@ -744,7 +803,7 @@ export class EditorCore {
       dragging = true;
       startX = e.clientX;
       startWidth = this._codePanelEl.getBoundingClientRect().width;
-      divider.classList.add('mde-divider--dragging');
+      divider.classList.add('se-divider--dragging');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
       e.preventDefault();
@@ -761,7 +820,7 @@ export class EditorCore {
     const onUp = () => {
       if (!dragging) return;
       dragging = false;
-      divider.classList.remove('mde-divider--dragging');
+      divider.classList.remove('se-divider--dragging');
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };

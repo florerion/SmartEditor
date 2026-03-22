@@ -23,6 +23,12 @@
 - Demo is served from repository root (not `demo/`): `npx serve .` then open `/demo/`.
 
 ## Conventions
+- UI class prefix is `se-` (legacy `mde-` class names were removed as a breaking change).
+- CSS custom properties use `--se-*` (legacy `--mde-*` vars were removed as a breaking change).
+- Web Component custom events use `se-*` names:
+	- `se-change`
+	- `se-selection-change`
+	- `se-preview-click`
 - Preserve sync mapping behavior: keep `data-source-line` / `data-source-line-end` support intact across parser and preview.
 - If introducing new HTML attributes needed in preview, update DOMPurify allowlist in `src/ui/PreviewPanel.js`.
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
@@ -31,6 +37,11 @@
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.
+- Keep `proposeChange(newMarkdown, { mode })` semantics stable:
+	- supported modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
+	- `replace-selection` falls back to `insert-at-cursor` when selection is empty,
+	- cursor insert uses `selection.to` (end of selection/cursor).
+- Diff modal for `proposeChange` should compare full document snapshots and highlight the changed target range (old/new), with cursor marker for insert mode.
 
 ## Scroll Sync
 - Split-mode bidirectional vertical scroll sync is implemented in `EditorCore` (`_handleCodePanelScroll`, `_handlePreviewPanelScroll`).

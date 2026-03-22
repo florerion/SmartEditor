@@ -115,12 +115,12 @@ export class Sync {
   }
 
   _highlight(el, root) {
-    root.querySelectorAll('.mde-sync-highlight')
-      .forEach(e => e.classList.remove('mde-sync-highlight'));
-    el.classList.add('mde-sync-highlight');
+    root.querySelectorAll('.se-sync-highlight')
+      .forEach(e => e.classList.remove('se-sync-highlight'));
+    el.classList.add('se-sync-highlight');
     clearTimeout(this._highlightTimer);
     this._highlightTimer = setTimeout(
-      () => el.classList.remove('mde-sync-highlight'),
+      () => el.classList.remove('se-sync-highlight'),
       1500,
     );
   }

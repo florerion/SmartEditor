@@ -1,4 +1,4 @@
-# md-wysiwyg-editor
+# Smart Editor
 
 A framework-agnostic Markdown editor for web apps with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, and source-line synchronization.
 
@@ -89,7 +89,7 @@ Importing the library registers the custom element as a side effect.
   const el = document.getElementById('mde');
   el.setMarkdown('# Initial content');
 
-  el.addEventListener('mde-change', (e) => {
+  el.addEventListener('se-change', (e) => {
     console.log(e.detail.markdown);
   });
 </script>
@@ -175,7 +175,7 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `removeDropdownItem` | `(groupId, dropdownId, itemId) => object` | Remove one dropdown entry by id. |
 | `runCommand` | `(id, args?)` | Run action by id programmatically. |
 | `openDrawioEditor` | `(opts?) => Promise<boolean>` | Open draw.io modal and insert/update `![draw.io](image){xml}` block line. |
-| `proposeChange` | `(newMarkdown) => Promise<boolean>` | Open diff modal and apply if accepted. |
+| `proposeChange` | `(newMarkdown, opts?) => Promise<boolean>` | Open diff modal and apply if accepted. Supports `opts.mode`: `replace-all`, `replace-selection`, `insert-at-cursor`. |
 | `destroy` | `()` | Dispose editor instance and listeners. |
 
 ### Example: programmatic content proposal
@@ -186,6 +186,17 @@ if (accepted) {
   console.log('Applied');
 }
 ```
+
+### Example: proposal apply modes
+
+```js
+await editor.proposeChange('# Full replacement', { mode: 'replace-all' });
+await editor.proposeChange('only this part', { mode: 'replace-selection' });
+await editor.proposeChange(' inserted chunk ', { mode: 'insert-at-cursor' });
+```
+
+- `replace-selection` falls back to `insert-at-cursor` when no text is selected.
+- In `insert-at-cursor`, insertion happens at the end of the current selection/cursor (`selection.to`).
 
 ## Events and Callback Usage
 
@@ -221,18 +232,18 @@ const editor = createEditor('#editor', {
 
 `<smart-editor>` emits CustomEvents:
 
-- `mde-change`: `detail = { markdown, tokens, html }`
-- `mde-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
-- `mde-preview-click`: `detail = { element, lineRange: { from, to } }`
+- `se-change`: `detail = { markdown, tokens, html }`
+- `se-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
+- `se-preview-click`: `detail = { element, lineRange: { from, to } }`
 
 ```js
 const el = document.querySelector('smart-editor');
 
-el.addEventListener('mde-change', (e) => {
+el.addEventListener('se-change', (e) => {
   console.log(e.detail.markdown);
 });
 
-el.addEventListener('mde-preview-click', (e) => {
+el.addEventListener('se-preview-click', (e) => {
   console.log(e.detail.lineRange.from);
 });
 ```

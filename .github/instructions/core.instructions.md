@@ -13,3 +13,11 @@ applyTo: "src/core/**"
 - For toolbar changes in `EditorCore`, prefer additive runtime APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over forcing full config replacement.
 - Maintain cleanup discipline: timers, DOM listeners, and document-level handlers must be removed in `destroy()` paths.
 - Prefer additive, local changes over cross-cutting rewrites in core modules.
+- Preserve `proposeChange(newMarkdown, { mode })` behavior:
+	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
+	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,
+	- insert mode uses `selection.to`.
+- Keep naming conventions stable in core-generated markup and selectors:
+	- CSS/UI classes use `se-*`,
+	- custom properties use `--se-*`,
+	- avoid reintroducing legacy `mde-*` naming.
