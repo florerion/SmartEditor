@@ -44,9 +44,9 @@ npm run build
 
 Build output is written to `dist/`:
 
-- `dist/md-editor.esm.js`
-- `dist/md-editor.cjs.js`
-- `dist/md-editor.iife.js`
+- `dist/smart-editor.esm.js`
+- `dist/smart-editor.cjs.js`
+- `dist/smart-editor.iife.js`
 
 ## Embedding the Editor on a Page
 
@@ -62,7 +62,7 @@ Build output is written to `dist/`:
 </script>
 
 <script type="module">
-  import { createEditor } from './dist/md-editor.esm.js';
+  import { createEditor } from './dist/smart-editor.esm.js';
 
   const editor = createEditor('#editor', {
     value: '# Hello',
@@ -76,15 +76,15 @@ Build output is written to `dist/`:
 </script>
 ```
 
-### Option B: Web Component (`<md-editor>`)
+### Option B: Web Component (`<smart-editor>`)
 
 Importing the library registers the custom element as a side effect.
 
 ```html
-<md-editor id="mde" mode="split" theme="auto" style="height: 600px;"></md-editor>
+<smart-editor id="mde" mode="split" theme="auto" style="height: 600px;"></smart-editor>
 
 <script type="module">
-  import './dist/md-editor.esm.js';
+  import './dist/smart-editor.esm.js';
 
   const el = document.getElementById('mde');
   el.setMarkdown('# Initial content');
@@ -145,7 +145,7 @@ const editor = createEditor('#editor', {
 
 ## Runtime API
 
-Returned editor instance (or `<md-editor>` proxies) provides:
+Returned editor instance (or `<smart-editor>` proxies) provides:
 
 | Method | Signature | Description |
 |---|---|---|
@@ -219,14 +219,14 @@ const editor = createEditor('#editor', {
 
 ### Web Component events
 
-`<md-editor>` emits CustomEvents:
+`<smart-editor>` emits CustomEvents:
 
 - `mde-change`: `detail = { markdown, tokens, html }`
 - `mde-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
 - `mde-preview-click`: `detail = { element, lineRange: { from, to } }`
 
 ```js
-const el = document.querySelector('md-editor');
+const el = document.querySelector('smart-editor');
 
 el.addEventListener('mde-change', (e) => {
   console.log(e.detail.markdown);
@@ -528,8 +528,8 @@ Use this section as a compatibility reference when upgrading the editor in host 
 
 - Initial public integration surface:
   - Factory: `createEditor(element, options)`
-  - Exports: `EditorCore`, `MdEditorElement`
-  - Web Component registration: `<md-editor>`
+  - Exports: `EditorCore`, `SmartEditorElement`
+  - Web Component registration: `<smart-editor>`
 - Runtime API includes document ops, selection ops, mode switching, action registration, draw.io modal, and diff-based `proposeChange`.
 - Core options include markdown-it configuration, upload configuration, draw.io URL override, and integration callbacks.
 - Built-in action groups include inline formatting, blocks, lists, links/images, table/mermaid/draw.io, and image upload.
@@ -589,4 +589,4 @@ If `upload.endpoint` is missing or fails, the editor falls back to base64 insert
 
 ### React usage
 
-A React adapter exists at `src/adapters/react/MdEditor.jsx`. In the current build exports, the main package entry exports `createEditor`, `EditorCore`, and `MdEditorElement`.
+A React adapter exists at `src/adapters/react/SmartEditor.jsx`. It exports `SmartEditor`. In the current build exports, the main package entry exports `createEditor`, `EditorCore`, and `SmartEditorElement`.

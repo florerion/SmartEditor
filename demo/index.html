@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>md-wysiwyg-editor — Demo (Etap 3)</title>
+  <title>SmartEditor — Demo (Etap 3)</title>
   <!-- KaTeX CSS required for math rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
   <!-- Mermaid (optional — comment out to see fallback raw code) -->
@@ -68,7 +68,7 @@
 <body>
 
   <header>
-    <h1>md-wysiwyg-editor — Etap 3</h1>
+    <h1>SmartEditor — Etap 3</h1>
 
     <div class="controls">
       <button onclick="logMd()">getMarkdown()</button>
@@ -87,7 +87,7 @@
   <pre id="log"></pre>
 
   <script type="module">
-    import { createEditor } from '../dist/md-editor.esm.js';
+    import { createEditor } from '../dist/smart-editor.esm.js';
 
     // ------------------------------------------------------------------ //
     // Initial content
@@ -95,7 +95,7 @@
     const DEMO_DRAWIO_XML = '<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
     const DEMO_DRAWIO_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgNjQwIDIyMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIyMjAiIHJ4PSIxNiIgZmlsbD0iI2VlZjZmZiIvPjxyZWN0IHg9IjI0IiB5PSIyNCIgd2lkdGg9IjU5MiIgaGVpZ2h0PSIxNzIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOTNjNWZkIi8+PHRleHQgeD0iMzIwIiB5PSIxMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzFkNGVkOCI+ZHJhdy5pbyBkZW1vPC90ZXh0Pjwvc3ZnPg==';
 
-    const DEMO = `# Witaj w md-wysiwyg-editor — Etap 3
+    const DEMO = `# Witaj w SmartEditor — Etap 3
 
 To jest **edytor Markdown** z podglądem na żywo.
 

@@ -8,7 +8,7 @@
 - Edit source files under `src/`; treat `dist/` as build output.
 
 ## Architecture
-- Public entrypoint is `src/index.js` (`createEditor`, `EditorCore`, `MdEditorElement`).
+- Public entrypoint is `src/index.js` (`createEditor`, `EditorCore`, `SmartEditorElement`).
 - `src/core/EditorCore.js` is the orchestrator that wires State, Parser, Sync, toolbar, code panel, and preview panel.
 - `src/core/Parser.js` wraps `markdown-it` and injects `data-source-line` attributes used for code-preview sync.
 - `src/ui/` contains UI building blocks (`CodePanel`, `PreviewPanel`, `Toolbar`, dialogs/modals).
