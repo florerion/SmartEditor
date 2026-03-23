@@ -73,7 +73,16 @@ function _showTableDialog(api) {
     const rows = Math.max(1, Math.min(50, parseInt(rowsInput.value, 10) || 3));
     const cols = Math.max(1, Math.min(20, parseInt(colsInput.value, 10) || 3));
     close();
-    api.insertText('\n' + _generateTable(rows, cols) + '\n');
+    const tableMarkdown = _generateTable(rows, cols);
+    const textToInsert = '\n' + tableMarkdown + '\n';
+    const sel = api.getSelection();
+    const insertPos = sel.to;
+
+    api.insertText(textToInsert);
+
+    const headerPlaceholder = 'Col 1';
+    const headerStart = insertPos + textToInsert.indexOf(headerPlaceholder);
+    api.setSelection(headerStart, headerStart + headerPlaceholder.length);
   };
 
   overlay.querySelector('.se-dialog__btn--ok').addEventListener('click', doInsert);

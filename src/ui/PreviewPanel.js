@@ -8,7 +8,7 @@ export class PreviewPanel {
   /**
    * @param {HTMLElement} container
    * @param {object} opts
-   * @param {Function} opts.onElementClick  ({ line, lineEnd, element }) => void
+    * @param {Function} opts.onElementClick  ({ line, lineEnd, element, viewportRatio }) => void
    * @param {Function} opts.onScroll        () => void
    */
   constructor(container, opts) {
@@ -74,10 +74,14 @@ export class PreviewPanel {
   _handleClick(event) {
     const el = event.target.closest('[data-source-line]');
     if (!el) return;
+    const rootRect = this._container.getBoundingClientRect();
+    const viewportRatio = rootRect.height > 0
+      ? Math.max(0, Math.min(1, (event.clientY - rootRect.top) / rootRect.height))
+      : 0.5;
     const line = parseInt(el.getAttribute('data-source-line'), 10);
     const rawEnd = el.getAttribute('data-source-line-end');
     const lineEnd = rawEnd != null ? parseInt(rawEnd, 10) : line;
-    this._onElementClick({ line, lineEnd, element: el });
+    this._onElementClick({ line, lineEnd, element: el, viewportRatio });
   }
 
   _handleScroll() {

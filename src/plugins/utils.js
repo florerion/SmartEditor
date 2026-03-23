@@ -18,7 +18,7 @@ export function wrapSelection(api, marker, placeholder = 'text') {
 
 /**
  * Prepend a prefix string to every selected line.
- * Works on the full document string for simplicity.
+ * Preserves cursor position after the prepended prefix on the first affected line.
  *
  * @param {object} api
  * @param {string} prefix  e.g. '# ', '> ', '- '
@@ -33,5 +33,15 @@ export function prependLines(api, prefix) {
   const updated = lines.map((line, i) =>
     i >= from && i <= to ? `${prefix}${line}` : line,
   );
-  api.setMarkdown(updated.join('\n'));
+  const newMarkdown = updated.join('\n');
+  api.setMarkdown(newMarkdown);
+
+  // Calculate cursor position: move it after the prefix on the first affected line
+  const firstAffectedLine = lines[from];
+  let cursorOffset = 0;
+  for (let i = 0; i < from; i++) {
+    cursorOffset += lines[i].length + 1; // +1 for newline
+  }
+  cursorOffset += prefix.length; // position after prefix on the first line
+  api.setSelection(cursorOffset, cursorOffset);
 }

@@ -51,6 +51,13 @@
 - Loop prevention uses a trailing-debounce source lock (`_scrollSyncSource`, `_extendScrollLock()`); do not replace with a fixed timer.
 - `CodePanel.getTopVisibleLine()` must use `lineBlockAtHeight(scrollTop)` — do not revert to `viewport.from`.
 - Scroll sync is active only when `mode === 'split'` and `opts.scrollSync !== false`.
+- Keep edit-time suppression in place: while user types, sync is temporarily paused via debounce (`_suppressScrollSyncTemporarily`) to avoid disorienting jumps.
+- Keep click-based alignment ratio-aware in both directions:
+	- code -> preview uses cursor viewport ratio,
+	- preview -> code uses click viewport ratio.
+- Preserve large-block fallback: when preview target block is taller than viewport, anchor it to top instead of forcing ratio alignment.
+- Preserve anti-jitter dead zone (ratio-based threshold) to avoid micro-scroll corrections when target is already near desired position.
+- Preview click navigation must retain temporary highlight and avoid feedback loops (mark source as `preview` before code scroll).
 - Clean up RAF handles and the release timer in `destroy()`.
 
 ## draw.io Packaging
