@@ -13,6 +13,8 @@ applyTo: "src/core/**"
 - For toolbar changes in `EditorCore`, prefer additive runtime APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over forcing full config replacement.
 - Maintain cleanup discipline: timers, DOM listeners, and document-level handlers must be removed in `destroy()` paths.
 - Prefer additive, local changes over cross-cutting rewrites in core modules.
+- Preserve preview image delete behavior in `EditorCore`: deleting a preview-selected image should remove the corresponding markdown image token, scoped to the mapped source block (`data-source-line` / `data-source-line-end`), instead of deleting a single code character.
+- Keep preview-delete key interception before editor keymaps (capture phase) when relying on document-level `keydown` handlers.
 - Preserve `proposeChange(newMarkdown, { mode })` behavior:
 	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,

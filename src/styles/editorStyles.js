@@ -330,6 +330,11 @@ export const EDITOR_STYLES = `
   border-radius: 4px;
 }
 
+.se-preview img.se-preview-image-selected {
+  outline: 2px solid var(--se-color-accent, #3b82f6);
+  outline-offset: 2px;
+}
+
 .se-preview a {
   color: var(--se-color-accent, #3b82f6);
   text-decoration: none;

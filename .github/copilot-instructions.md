@@ -37,6 +37,9 @@
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.
+- Preview image deletion UX: when an image is selected in preview and user presses `Delete`/`Backspace`, remove the corresponding markdown image token (`![...](...)`, including draw.io variant) rather than deleting a single character from code.
+- Keep preview delete keyboard interception in capture phase so CodeMirror does not consume `Delete` first.
+- `ImageResize` handle uses `position: fixed`; compute handle coordinates in viewport space (do not add `window.scrollX/window.scrollY`).
 - Keep `proposeChange(newMarkdown, { mode })` semantics stable:
 	- supported modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- `replace-selection` falls back to `insert-at-cursor` when selection is empty,

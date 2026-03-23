@@ -71,6 +71,7 @@ export class EditorCore {
     this._scrollSyncReleaseTimer = null;
     this._codeScrollRaf = null;
     this._previewScrollRaf = null;
+    this._selectedPreviewImageEl = null;
 
     this._diffModal = new DiffModal();
     this._drawioModal = new DrawioModal({ url: opts.drawio?.url });
@@ -472,6 +473,7 @@ export class EditorCore {
     this._bus.destroy();
     this._cleanupDivider?.();
     this._previewPanelEl?.removeEventListener('click', this._boundPreviewAction);
+    document.removeEventListener('keydown', this._boundPreviewDeleteKey, true);
 
     this._root.innerHTML = '';
     ['se-editor', 'se-mode-split', 'se-mode-code', 'se-mode-preview', 'se-mode-wysiwyg']
@@ -570,6 +572,8 @@ export class EditorCore {
     );
 
     this._boundPreviewAction = async (event) => {
+      this._setSelectedPreviewImage(event.target.closest('img.se-image, img.se-drawio'));
+
       const trigger = event.target.closest('[data-se-drawio-open]');
       if (!trigger) return;
 
@@ -582,7 +586,21 @@ export class EditorCore {
       await this.openDrawioEditor({ xml, line: Number.isNaN(line) ? undefined : line });
     };
 
+    this._boundPreviewDeleteKey = (event) => {
+      if (!this._selectedPreviewImageEl) return;
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const deleted = this._deleteSelectedPreviewImageMarkdown();
+      if (!deleted) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      this._setSelectedPreviewImage(null);
+    };
+
     this._previewPanelEl.addEventListener('click', this._boundPreviewAction);
+    document.addEventListener('keydown', this._boundPreviewDeleteKey, true);
   }
 
   _buildToolbar() {
@@ -620,6 +638,7 @@ export class EditorCore {
 
   _updatePreview(markdown) {
     const { html } = this._parser.render(markdown);
+    this._setSelectedPreviewImage(null);
     this._previewPanel.render(html);
     this._renderMath();
     this._renderMermaid();
@@ -865,6 +884,85 @@ export class EditorCore {
     };
   }
 
+  _setSelectedPreviewImage(nextImage) {
+    if (this._selectedPreviewImageEl === nextImage) return;
+    this._selectedPreviewImageEl?.classList.remove('se-preview-image-selected');
+    this._selectedPreviewImageEl = nextImage ?? null;
+    this._selectedPreviewImageEl?.classList.add('se-preview-image-selected');
+  }
+
+  _deleteSelectedPreviewImageMarkdown() {
+    const imageEl = this._selectedPreviewImageEl;
+    if (!imageEl) return false;
+
+    const sourceEl = imageEl.closest('[data-source-line]');
+    const startLine = parseInt(sourceEl?.getAttribute('data-source-line') ?? '-1', 10);
+    const endLineAttr = sourceEl?.getAttribute('data-source-line-end');
+    const endLine = parseInt(endLineAttr ?? String(startLine), 10);
+    if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 0 || endLine < startLine) {
+      return false;
+    }
+
+    const markdown = this.getMarkdown();
+    const lines = markdown.split('\n');
+    if (!lines.length || startLine >= lines.length) return false;
+
+    const clampedEnd = Math.min(endLine, lines.length - 1);
+    const range = this._findImageTokenRangeInBlock(markdown, lines, startLine, clampedEnd, imageEl);
+    if (!range) return false;
+
+    this.setSelection(range.from, range.to);
+    this.replaceSelection('');
+    return true;
+  }
+
+  _findImageTokenRangeInBlock(markdown, lines, startLine, endLine, imageEl) {
+    if (!Number.isInteger(startLine) || !Number.isInteger(endLine)) return null;
+    if (startLine < 0 || endLine < startLine) return null;
+    if (startLine >= lines.length || endLine >= lines.length) return null;
+
+    const blockText = lines.slice(startLine, endLine + 1).join('\n');
+    const src = imageEl.getAttribute('src') ?? '';
+    if (!src) return null;
+
+    const expectsDrawioSuffix = imageEl.classList.contains('se-drawio');
+    const escapedSrc = _escapeRegExp(src);
+    const tokenPattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)(?:\\{[^}]*\\})?`, 'g');
+    let match;
+
+    while ((match = tokenPattern.exec(blockText)) !== null) {
+      const token = match[0];
+      const hasDrawioSuffix = /\{[^}]*\}$/.test(token);
+      if (expectsDrawioSuffix && !hasDrawioSuffix) continue;
+
+      const blockStart = this._getCharacterOffsetForLine(lines, startLine);
+      let from = blockStart + match.index;
+      let to = from + token.length;
+
+      // Keep inline spacing natural after removing just one markdown image token.
+      if (markdown[from - 1] === ' ' && markdown[to] === ' ') {
+        to += 1;
+      } else if (markdown[from - 1] === ' ' && (to >= markdown.length || markdown[to] === '\n')) {
+        from -= 1;
+      } else if (markdown[to] === ' ') {
+        to += 1;
+      }
+
+      if (to < from) return null;
+      return { from, to };
+    }
+
+    return null;
+  }
+
+  _getCharacterOffsetForLine(lines, lineIndex) {
+    let offset = 0;
+    for (let i = 0; i < lineIndex; i++) {
+      offset += lines[i].length + 1;
+    }
+    return offset;
+  }
+
   _ensureToolbarGroupsArray(config) {
     if (!config.groups) {
       config.groups = [];
@@ -932,6 +1030,10 @@ function _resolveInsertIndex(items, beforeId, afterId) {
   }
 
   return items.length;
+}
+
+function _escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function _defaultDrawioImage() {

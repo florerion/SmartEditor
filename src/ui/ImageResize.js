@@ -86,10 +86,13 @@ export class ImageResize {
   }
 
   _repositionHandle(img) {
-    const rect   = img.getBoundingClientRect();
-    const HALF   = 8;
-    this._handle.style.left = `${rect.right  - HALF + window.scrollX}px`;
-    this._handle.style.top  = `${rect.bottom - HALF + window.scrollY}px`;
+    const rect = img.getBoundingClientRect();
+    const SIZE = 16;
+    const margin = 1;
+
+    // Handle uses position: fixed, so coordinates must stay in viewport space.
+    this._handle.style.left = `${Math.round(rect.right - SIZE - margin)}px`;
+    this._handle.style.top = `${Math.round(rect.bottom - SIZE - margin)}px`;
   }
 
   _scheduleHideHandle() {
