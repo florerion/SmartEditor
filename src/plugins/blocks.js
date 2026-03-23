@@ -51,7 +51,13 @@ export const blockActions = [
     run: (api) => {
       const sel = api.getSelection();
       const content = sel.text || 'code here';
-      api.replaceSelection(`\`\`\`\n${content}\n\`\`\``);
+      const block = `\`\`\`\n${content}\n\`\`\``;
+      api.replaceSelection(block);
+
+      if (!sel.text) {
+        const contentStart = sel.from + 4;
+        api.setSelection(contentStart, contentStart + content.length);
+      }
     },
   },
 ];

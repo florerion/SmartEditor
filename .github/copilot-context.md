@@ -111,6 +111,16 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Key methods added to `CodePanel`: `getTopVisibleLine`, `scrollViewportToLine`, `onScroll` callback.
 - Key method added to `PreviewPanel`: `onScroll` callback.
 
+### 2026-03-23 sync and insertion refinements
+- Toolbar insertion behavior is now consistent for empty selection:
+  - headings/blockquote/lists keep cursor right after inserted prefix,
+  - table action selects `Col 1` placeholder in header row,
+  - code block action selects `code here` placeholder when inserted.
+- Preview click -> code navigation now keeps preview stable (source lock marked as `preview`) and restores temporary clicked-line highlight.
+- Code click/cursor -> preview navigation uses cursor viewport ratio; preview click -> code navigation uses click viewport ratio.
+- Large preview blocks still fall back to top anchoring, and both directions include dead-zone thresholds to suppress tiny jitter scroll corrections.
+- Typing now temporarily suppresses sync (debounced) to prevent disorienting jumps while editing.
+
 ## Propose Change Extension (branch: propose-extension)
 - `EditorCore.proposeChange(newMarkdown, { mode })` now supports:
   - `replace-all`
@@ -167,4 +177,4 @@ Use this project context and instruction files as the source of truth. Before ma
 
 ## Last Updated
 - Date: 2026-03-23
-- Reason: added preview image UX fixes context (token-level delete behavior + resize handle corner anchoring)
+- Reason: added consistent insertion UX and ratio-aware anti-jitter scroll sync refinements.

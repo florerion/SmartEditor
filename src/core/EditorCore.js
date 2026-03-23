@@ -69,6 +69,8 @@ export class EditorCore {
     this._scrollSyncEnabled = opts.scrollSync !== false;
     this._scrollSyncSource = null;
     this._scrollSyncReleaseTimer = null;
+    this._scrollSyncSuppressed = false;
+    this._scrollSyncDebounceTimer = null;
     this._codeScrollRaf = null;
     this._previewScrollRaf = null;
     this._selectedPreviewImageEl = null;
@@ -461,6 +463,7 @@ export class EditorCore {
   destroy() {
     clearTimeout(this._previewDebounce);
     clearTimeout(this._scrollSyncReleaseTimer);
+    clearTimeout(this._scrollSyncDebounceTimer);
     cancelAnimationFrame(this._codeScrollRaf);
     cancelAnimationFrame(this._previewScrollRaf);
     this._codePanel.destroy();
@@ -525,6 +528,7 @@ export class EditorCore {
       onChange: (value) => {
         this._state.setValue(value);
         this._schedulePreviewUpdate(value);
+        this._suppressScrollSyncTemporarily();
         this._bus.emit('change', value);
         if (this._opts.onChange) {
           const { tokens, html } = this._parser.render(value);
@@ -533,8 +537,17 @@ export class EditorCore {
       },
 
       onCursorMove: (line) => {
-        if (this._mode === 'split') {
-          this._sync.codeLineToPreview(line, this._previewPanelEl);
+        if (
+          this._mode === 'split'
+          && !this._scrollSyncSuppressed
+          && this._scrollSyncSource !== 'preview'
+        ) {
+          this._markScrollSyncSource('code');
+          const viewportRatio = this._codePanel.getCursorViewportRatio();
+          this._sync.codeLineToPreview(line, this._previewPanelEl, {
+            behavior: 'smooth',
+            targetViewportRatio: viewportRatio,
+          });
         }
         this._toolbar.updateState();
       },
@@ -556,8 +569,10 @@ export class EditorCore {
 
   _buildPreviewPanel() {
     this._previewPanel = new PreviewPanel(this._previewPanelEl, {
-      onElementClick: ({ line, lineEnd, element }) => {
-        this._codePanel.scrollToLine(line);
+      onElementClick: ({ line, lineEnd, element, viewportRatio }) => {
+        this._sync.highlightPreviewElement(element, this._previewPanelEl);
+        this._markScrollSyncSource('preview');
+        this._codePanel.scrollToLineAtRatio(line, viewportRatio, { behavior: 'smooth' });
         this._bus.emit('previewClick', { line, lineEnd, element });
         this._opts.onPreviewClick?.(element, { from: line, to: lineEnd });
       },
@@ -756,7 +771,16 @@ export class EditorCore {
   }
 
   _isScrollSyncActive() {
-    return this._scrollSyncEnabled && this._mode === 'split';
+    return this._scrollSyncEnabled && this._mode === 'split' && !this._scrollSyncSuppressed;
+  }
+
+  // Temporarily suppress scroll sync during active editing (debounce: 300ms after last change).
+  _suppressScrollSyncTemporarily() {
+    this._scrollSyncSuppressed = true;
+    clearTimeout(this._scrollSyncDebounceTimer);
+    this._scrollSyncDebounceTimer = setTimeout(() => {
+      this._scrollSyncSuppressed = false;
+    }, 300);
   }
 
   // Begin programmatic scroll lock and refresh its trailing timeout.
@@ -787,7 +811,10 @@ export class EditorCore {
       if (!this._isScrollSyncActive()) return;
       if (!Number.isFinite(topLine)) return;
       this._markScrollSyncSource('code');
-      this._sync.scrollPreviewToLine(topLine, this._previewPanelEl, { behavior: 'smooth' });
+      this._sync.scrollPreviewToLine(topLine, this._previewPanelEl, {
+        behavior: 'smooth',
+        targetViewportRatio: 0,
+      });
     });
   }
 

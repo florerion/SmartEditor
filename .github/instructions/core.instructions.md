@@ -15,6 +15,13 @@ applyTo: "src/core/**"
 - Prefer additive, local changes over cross-cutting rewrites in core modules.
 - Preserve preview image delete behavior in `EditorCore`: deleting a preview-selected image should remove the corresponding markdown image token, scoped to the mapped source block (`data-source-line` / `data-source-line-end`), instead of deleting a single code character.
 - Keep preview-delete key interception before editor keymaps (capture phase) when relying on document-level `keydown` handlers.
+- Preserve scroll-sync loop guards in `EditorCore`:
+	- source lock (`_scrollSyncSource`) with trailing debounce,
+	- temporary typing suppression (`_suppressScrollSyncTemporarily`) to prevent editor jumps while editing.
+- Keep click navigation ratio-aware and symmetric:
+	- code cursor ratio drives preview alignment,
+	- preview click ratio drives code alignment.
+- Keep `Sync` dead-zone behavior for tiny deltas to avoid jitter, and preserve large-preview-block fallback to top anchoring.
 - Preserve `proposeChange(newMarkdown, { mode })` behavior:
 	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,

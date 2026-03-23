@@ -257,10 +257,55 @@ export class CodePanel {
     this._view.focus();
   }
 
+  /**
+   * Scroll to and select a 0-based line while preserving relative viewport height.
+   * @param {number} line
+   * @param {number} viewportRatio  Desired line position in viewport (0..1)
+   * @param {object} [opts]
+   * @param {'auto'|'smooth'} [opts.behavior='auto']
+    * @param {number} [opts.deadZoneRatio=0.04] Ignore tiny scroll deltas (0..1 of viewport)
+   */
+  scrollToLineAtRatio(line, viewportRatio, opts = {}) {
+    const state = this._view.state;
+    const cmLine = Math.max(1, Math.min(line + 1, state.doc.lines));
+    const lineObj = state.doc.line(cmLine);
+    const ratio = Number.isFinite(viewportRatio)
+      ? Math.max(0, Math.min(1, viewportRatio))
+      : 0.5;
+    const rawDeadZoneRatio = Number.isFinite(opts.deadZoneRatio)
+      ? opts.deadZoneRatio
+      : 0.04;
+    const deadZoneRatio = Math.max(0, Math.min(1, rawDeadZoneRatio));
+
+    this._view.dispatch({ selection: { anchor: lineObj.from } });
+
+    const blockTop = this._view.lineBlockAt(lineObj.from).top;
+    const viewportHeight = this._scroller.clientHeight || 1;
+    const targetTop = Math.max(0, blockTop - (ratio * viewportHeight));
+    const deadZonePx = Math.max(2, viewportHeight * deadZoneRatio);
+    if (Math.abs(targetTop - this._scroller.scrollTop) > deadZonePx) {
+      this._scroller.scrollTo({ top: targetTop, behavior: opts.behavior ?? 'auto' });
+    }
+    this._view.focus();
+  }
+
   /** @returns {number} 0-based current cursor line */
   getCursorLine() {
     const state = this._view.state;
     return state.doc.lineAt(state.selection.main.head).number - 1;
+  }
+
+  /**
+   * Get current cursor vertical position as viewport ratio (0..1).
+   * Returns 0.5 if coordinates are not available.
+   * @returns {number}
+   */
+  getCursorViewportRatio() {
+    const head = this._view.state.selection.main.head;
+    const coords = this._view.coordsAtPos(head);
+    const rect = this._scroller.getBoundingClientRect();
+    if (!coords || rect.height <= 0) return 0.5;
+    return Math.max(0, Math.min(1, (coords.top - rect.top) / rect.height));
   }
 
   /** @returns {number} 0-based line near the top of the visible editor viewport */

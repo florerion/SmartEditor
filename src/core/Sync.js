@@ -17,10 +17,27 @@ export class Sync {
    * Given a 0-based line number, scroll the closest preview element into view.
    * @param {number}      line        0-based line index from CodeMirror
    * @param {HTMLElement} previewRoot The preview panel root element
+   * @param {object}      [opts]
+   * @param {'auto'|'smooth'} [opts.behavior='smooth']
+   * @param {number} [opts.targetViewportRatio=0.5] Desired vertical ratio (0..1)
    */
-  codeLineToPreview(line, previewRoot) {
-    const el = this.scrollPreviewToLine(line, previewRoot, { behavior: 'smooth' });
-    if (el) this._highlight(el, previewRoot);
+  codeLineToPreview(line, previewRoot, opts = {}) {
+    const behavior = opts.behavior ?? 'smooth';
+    const targetViewportRatio = Number.isFinite(opts.targetViewportRatio)
+      ? opts.targetViewportRatio
+      : 0.5;
+    const el = this.scrollPreviewToLine(line, previewRoot, { behavior, targetViewportRatio });
+    if (el) this.highlightPreviewElement(el, previewRoot);
+  }
+
+  /**
+   * Briefly highlight a preview element without changing scroll position.
+   * @param {HTMLElement|null} el
+   * @param {HTMLElement} previewRoot
+   */
+  highlightPreviewElement(el, previewRoot) {
+    if (!el || !previewRoot) return;
+    this._highlight(el, previewRoot);
   }
 
   /**
@@ -29,6 +46,8 @@ export class Sync {
    * @param {HTMLElement} previewRoot
    * @param {object} [opts]
    * @param {'auto'|'smooth'} [opts.behavior='smooth']
+   * @param {number} [opts.targetViewportRatio=0.5] Desired vertical ratio (0..1)
+  * @param {number} [opts.deadZoneRatio=0.04] Ignore tiny scroll deltas (0..1 of viewport)
    * @returns {HTMLElement|null}
    */
   scrollPreviewToLine(line, previewRoot, opts = {}) {
@@ -37,10 +56,29 @@ export class Sync {
     if (!el) return null;
 
     const behavior = opts.behavior ?? 'smooth';
+    const rawRatio = Number.isFinite(opts.targetViewportRatio)
+      ? opts.targetViewportRatio
+      : 0.5;
+    const ratio = Math.max(0, Math.min(1, rawRatio));
+    const rawDeadZoneRatio = Number.isFinite(opts.deadZoneRatio)
+      ? opts.deadZoneRatio
+      : 0.04;
+    const deadZoneRatio = Math.max(0, Math.min(1, rawDeadZoneRatio));
     const rootRect = previewRoot.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
-    const top = previewRoot.scrollTop + (elRect.top - rootRect.top);
-    previewRoot.scrollTo({ top: Math.max(0, top), behavior });
+    const viewportHeight = rootRect.height > 0 ? rootRect.height : (previewRoot.clientHeight || 1);
+    // Large blocks should anchor at top; smaller blocks can preserve relative height.
+    const effectiveRatio = elRect.height > viewportHeight ? 0 : ratio;
+    const top = previewRoot.scrollTop
+      + (elRect.top - rootRect.top)
+      - (effectiveRatio * viewportHeight);
+    const targetTop = Math.max(0, top);
+    const deadZonePx = Math.max(2, viewportHeight * deadZoneRatio);
+    if (Math.abs(targetTop - previewRoot.scrollTop) <= deadZonePx) {
+      return el;
+    }
+
+    previewRoot.scrollTo({ top: targetTop, behavior });
     return el;
   }
 
