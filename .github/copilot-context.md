@@ -131,6 +131,18 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
   - `README.md`
   - `demo/index.html`
 
+## Preview Image UX Fixes (branch: deleting-images-fix)
+- Deleting an image selected in preview now removes the corresponding markdown **image token**
+  (e.g. `![alt](src)` or draw.io `![draw.io](src){xml}`), not just a single character and not the whole line by default.
+- `EditorCore` tracks selected preview image state via `.se-preview-image-selected` and handles
+  `Delete`/`Backspace` with a document-level `keydown` listener in capture phase to prevent
+  CodeMirror from consuming the key first.
+- Token lookup is constrained to the mapped `data-source-line` / `data-source-line-end` block,
+  preserving source/preview sync semantics.
+- Image resize handle positioning in `ImageResize` was corrected for `position: fixed` coordinates:
+  viewport-space values are used directly (no `window.scrollX/window.scrollY` offsets), so the
+  handle stays anchored in the image corner.
+
 ## Build And Validation
 - Install deps: `npm install`
 - Build: `npm run build`
@@ -154,5 +166,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-22
-- Reason: finalized breaking rename migration to `se-*` naming (classes, CSS vars, and web-component events) and preserved `proposeChange` mode extension context
+- Date: 2026-03-23
+- Reason: added preview image UX fixes context (token-level delete behavior + resize handle corner anchoring)
