@@ -89,7 +89,7 @@
       <button onclick="removeTemplate()">removeTemplate()</button>
       <button onclick="toggleMode()">toggleMode()</button>
       <button onclick="toggleTheme()">toggleTheme()</button>
-      <div class="controls-hint">Hint: zaznacz fragment tekstu przed <code>replace-selection</code>; bez zaznaczenia tryb zrobi fallback do <code>insert-at-cursor</code>.</div>
+      <div class="controls-hint">Hint: zaznacz fragment tekstu przed <code>replace-selection</code>; bez zaznaczenia tryb zrobi fallback do <code>insert-at-cursor</code>. <code>toggleTheme()</code> przełącza teraz wszystkie built-in presety (w tym <code>solarized</code>, <code>nord</code>, <code>high-contrast</code>).</div>
     </div>
   </header>
 
@@ -97,7 +97,9 @@
   <pre id="log"></pre>
 
   <script type="module">
-    import { createEditor } from '../dist/smart-editor.esm.js';
+    import { createEditor, getEditorThemeList } from '../dist/smart-editor.esm.js';
+
+    const BUILT_IN_THEMES = getEditorThemeList();
 
     // ------------------------------------------------------------------ //
     // Initial content
@@ -178,6 +180,22 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       { id: 'news', label: 'News Article' },
       { id: 'review', label: 'Product Review' },
     ];
+
+    function buildThemeDropdownIcon() {
+      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1a5 5 0 0 0 0 10c.7 0 1.2.57 1.2 1.27 0 .62-.42 1.15-1.02 1.27A6.5 6.5 0 1 1 14.5 8c0 .45-.37.82-.82.82H12.5a.7.7 0 0 0-.7.7c0 .7-.57 1.27-1.27 1.27H8.7a2 2 0 0 1-2-2C6.7 7.25 7.95 6 9.5 6h2.2a.7.7 0 0 0 .7-.7A4.4 4.4 0 0 0 8 1Zm-3 5.1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm3.1-1A1 1 0 1 0 8.1 3a1 1 0 0 0 0 2.1Zm3 1A1 1 0 1 0 11.1 4a1 1 0 0 0 0 2.1Z"/></svg>';
+    }
+
+    function buildAutoThemeIcon() {
+      return '<svg class="se-theme-auto-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#9ca3af"/><path d="M8 2a6 6 0 0 1 0 12Z" fill="#111827"/></svg>';
+    }
+
+    function buildThemeSwatchIcon(theme) {
+      const swatch = theme?.swatch ?? {};
+      const bg = swatch.bg ?? '#ffffff';
+      const accent = swatch.accent ?? '#3b82f6';
+      const border = swatch.border ?? '#d0d7de';
+      return `<svg class="se-theme-swatch-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.2" y="1.2" width="13.6" height="13.6" rx="3" fill="${bg}" stroke="${border}" stroke-width="1.2"/><circle cx="11.5" cy="4.5" r="2.1" fill="${accent}"/></svg>`;
+    }
 
     let showRegisteredStar = false;
 
@@ -263,6 +281,45 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
             items: showRegisteredStar ? [
               { action: 'star-wrap', label: 'Highlight', display: 'label' },
             ] : [],
+          },
+          {
+            id: 'theme',
+            order: 70,
+            items: [
+              {
+                id: 'theme-selector',
+                label: 'Theme',
+                icon: buildThemeDropdownIcon(),
+                display: 'icon-label',
+                items: [
+                  {
+                    id: 'theme-auto',
+                    label: 'Auto',
+                    icon: buildAutoThemeIcon(),
+                    display: 'icon-label',
+                    run(api) {
+                      api.setTheme('auto');
+                    },
+                    isActive(state) {
+                      return state.theme === 'auto';
+                    },
+                  },
+                  ...BUILT_IN_THEMES.map((theme) => ({
+                    id: `theme-${theme.id}`,
+                    label: theme.label,
+                    title: theme.description,
+                    icon: buildThemeSwatchIcon(theme),
+                    display: 'icon-label',
+                    run(api) {
+                      api.setTheme(theme.id);
+                    },
+                    isActive(state) {
+                      return state.theme === theme.id;
+                    },
+                  })),
+                ],
+              },
+            ],
           },
         ],
       };
@@ -417,11 +474,13 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       log(`setMode('${MODES[modeIdx]}')`);
     };
 
-    let dark = false;
+    const THEMES = ['auto', ...editor.getAvailableThemes().map((theme) => theme.id)];
+    let themeIdx = 0;
     window.toggleTheme = () => {
-      dark = !dark;
-      editor._root.setAttribute('data-theme', dark ? 'dark' : 'light');
-      log(`theme → ${dark ? 'dark' : 'light'}`);
+      themeIdx = (themeIdx + 1) % THEMES.length;
+      const nextTheme = THEMES[themeIdx];
+      editor.setTheme(nextTheme);
+      log(`theme → ${nextTheme}`);
     };
 
     // ------------------------------------------------------------------ //

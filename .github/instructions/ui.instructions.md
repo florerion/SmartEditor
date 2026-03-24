@@ -17,6 +17,10 @@ applyTo: "src/ui/**"
 	- action-derived fallback mode should still respect `group` and `order`,
 	- declarative mode should follow explicit `toolbar.groups/items` order only.
 - Preserve dropdown UX safeguards in `Toolbar` (hover bridge + delayed close + click/focus support); avoid immediate close on transient pointer gaps.
+- For theme UI, source options from `getAvailableThemes()` / `getEditorThemeList()` metadata (including `swatch`) instead of duplicating color literals in toolbar/demo.
+- Keep theme dropdown visual behavior stable:
+	- item-level active state is highlighted in menu,
+	- dropdown trigger highlights only while open.
 - Ensure every component that attaches listeners/timers cleans them in `destroy()`.
 - In `ImageResize`, keep handle anchoring consistent with `position: fixed` (viewport coordinates only); avoid adding page scroll offsets that shift the handle below the image.
 - Preserve preview image selection affordance class (`.se-preview-image-selected`) used by core keyboard-delete flow.

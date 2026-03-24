@@ -55,6 +55,29 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
   - CSS hover bridge between trigger and menu,
   - delayed close logic (160ms) with cancellation on pointer/focus re-entry,
   - click/focus support remains enabled.
+- Built-in theme selector:
+  - default action-derived toolbar now appends a `Theme` dropdown automatically,
+  - options are generated from `api.getAvailableThemes()` plus `Auto`,
+  - entries use `icon-label` display with color swatches,
+  - dropdown trigger stays neutral when closed and highlights only while open,
+  - active theme indication is shown on menu entries (not persistent on closed trigger).
+
+## Theme System Snapshot (Current)
+- Central theme registry: `src/styles/themes.js`.
+- Built-in presets:
+  - `light`, `dark`, `sepia`, `midnight`, `solarized`, `nord`, `high-contrast`.
+- Theme metadata is exposed for UI consumers via:
+  - `getEditorThemeList()` (includes `id`, `label`, `description`, `scheme`, `swatch`),
+  - `EDITOR_THEME_PRESETS` export from `src/index.js`.
+- Runtime API in `EditorCore`:
+  - `setTheme(theme)`,
+  - `getTheme()`,
+  - `getAvailableThemes()`.
+- Web component proxy methods:
+  - `setTheme`, `getTheme`, `getAvailableThemes`.
+- Style composition:
+  - `src/styles/editorStyles.js` consumes tokens and injects generated theme CSS via `buildEditorThemeStyles()`,
+  - `auto` maps to OS dark preference only when `data-theme` is not set.
 
 ## draw.io Snapshot (Current)
 - Markdown serialization for draw.io is now one-line only:
@@ -176,5 +199,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-23
-- Reason: added consistent insertion UX and ratio-aware anti-jitter scroll sync refinements.
+- Date: 2026-03-24
+- Reason: added centralized multi-theme system, built-in toolbar theme selector (with swatches), and refined dropdown trigger highlight behavior.

@@ -10,6 +10,7 @@ import { ImageResize } from '../ui/ImageResize.js';
 import { DiffModal } from '../ui/DiffModal.js';
 import { DrawioModal } from '../ui/DrawioModal.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
+import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
 import { registerDefaultActions } from '../plugins/index.js';
 import { ImageUploadHandler, createImageUploadAction } from '../plugins/imageUpload.js';
 
@@ -30,7 +31,7 @@ export class EditorCore {
    * @param {string}      [opts.value='']
    * @param {string}      [opts.mode='split']       'split' | 'code' | 'preview' | 'wysiwyg'
   * @param {boolean}     [opts.scrollSync=true]    Keep code/preview vertical scroll synchronized in split mode
-   * @param {string}      [opts.theme='auto']       'light' | 'dark' | 'auto'
+  * @param {string}      [opts.theme='auto']       'auto' or one of the registered built-in theme ids
    * @param {object}      [opts.markdown]
    * @param {object}      [opts.markdown.options]   Passed to markdown-it constructor
    * @param {Array}       [opts.markdown.plugins]   [[fn, opts?], ...]
@@ -74,6 +75,7 @@ export class EditorCore {
     this._codeScrollRaf = null;
     this._previewScrollRaf = null;
     this._selectedPreviewImageEl = null;
+    this._theme = 'auto';
 
     this._diffModal = new DiffModal();
     this._drawioModal = new DrawioModal({ url: opts.drawio?.url });
@@ -144,6 +146,36 @@ export class EditorCore {
 
   /** @returns {'split'|'code'|'preview'|'wysiwyg'} */
   getMode() { return this._mode; }
+
+  /** @returns {string} */
+  getTheme() { return this._theme; }
+
+  /** @returns {{ id: string, label: string, description: string, scheme: string }[]} */
+  getAvailableThemes() { return getEditorThemeList(); }
+
+  /**
+   * @param {string} theme
+   * @returns {string}
+   * @throws {Error} If `theme` is not `auto` and is not a registered built-in theme
+   */
+  setTheme(theme = 'auto') {
+    const normalized = typeof theme === 'string' && theme.trim() ? theme.trim() : 'auto';
+
+    if (normalized !== 'auto' && !isEditorTheme(normalized)) {
+      throw new Error(`[EditorCore] Unsupported theme: ${normalized}`);
+    }
+
+    this._theme = normalized;
+    this._opts.theme = normalized;
+
+    if (normalized === 'auto') {
+      this._root.removeAttribute('data-theme');
+    } else {
+      this._root.setAttribute('data-theme', normalized);
+    }
+
+    return this._theme;
+  }
 
   /**
    * Register a custom toolbar action.
@@ -479,6 +511,7 @@ export class EditorCore {
     document.removeEventListener('keydown', this._boundPreviewDeleteKey, true);
 
     this._root.innerHTML = '';
+    this._root.removeAttribute('data-theme');
     ['se-editor', 'se-mode-split', 'se-mode-code', 'se-mode-preview', 'se-mode-wysiwyg']
       .forEach(c => this._root.classList.remove(c));
   }
@@ -497,9 +530,7 @@ export class EditorCore {
 
   _buildDOM() {
     this._root.classList.add('se-editor');
-    if (this._opts.theme && this._opts.theme !== 'auto') {
-      this._root.setAttribute('data-theme', this._opts.theme);
-    }
+    this.setTheme(this._opts.theme ?? 'auto');
 
     this._root.innerHTML = `
       <div class="se-layout">
@@ -906,6 +937,9 @@ export class EditorCore {
       upsertDropdownItem: (groupId, dropdownId, item, position) => this.upsertDropdownItem(groupId, dropdownId, item, position),
       removeDropdownItem: (groupId, dropdownId, itemId) => this.removeDropdownItem(groupId, dropdownId, itemId),
       runCommand: (id, args) => this.runCommand(id, args),
+      getTheme: () => this.getTheme(),
+      setTheme: (theme) => this.setTheme(theme),
+      getAvailableThemes: () => this.getAvailableThemes(),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       focus: () => this.focus(),
     };

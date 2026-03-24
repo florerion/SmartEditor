@@ -123,10 +123,8 @@ export class Toolbar {
     this._dropdownEntries.forEach((dropdown) => {
       const interactiveChildren = dropdown.entries.filter((entry) => !entry.element.hidden);
       const anyEnabled = interactiveChildren.some((entry) => entry.enabled !== false);
-      const anyActive = interactiveChildren.some((entry) => entry.active === true);
 
       dropdown.trigger.disabled = !anyEnabled;
-      dropdown.trigger.classList.toggle('se-toolbar__btn--active', anyActive);
       dropdown.trigger.setAttribute('aria-expanded', String(this._openDropdownId === dropdown.id));
     });
   }
@@ -199,7 +197,7 @@ export class Toolbar {
       groupedActions.get(groupId).push(action);
     });
 
-    return [...groupedActions.entries()]
+    const groups = [...groupedActions.entries()]
       .map(([groupId, actions], index) => ({
         id: groupId,
         order: Math.min(...actions.map((action) => action.order ?? 50), index * 100),
@@ -209,6 +207,74 @@ export class Toolbar {
           .map((action) => ({ type: 'action', id: action.id, action: action.id })),
       }))
       .sort((a, b) => a.order - b.order);
+
+    const themeSelectorGroup = this._buildThemeSelectorGroup();
+    if (themeSelectorGroup) groups.push(themeSelectorGroup);
+
+    return groups;
+  }
+
+  _buildThemeSelectorGroup() {
+    const api = this._getAPI?.();
+    if (!api || typeof api.getAvailableThemes !== 'function' || typeof api.setTheme !== 'function') {
+      return null;
+    }
+
+    const availableThemes = api.getAvailableThemes();
+    if (!Array.isArray(availableThemes) || !availableThemes.length) return null;
+
+    const themeEntries = [
+      {
+        id: 'theme-auto',
+        label: 'Auto',
+        icon: this._buildAutoThemeIcon(),
+        display: 'icon-label',
+        run: (runtimeApi) => runtimeApi.setTheme('auto'),
+        isActive: (state) => state.theme === 'auto',
+      },
+      ...availableThemes.map((theme) => ({
+        id: `theme-${theme.id}`,
+        label: theme.label ?? theme.id,
+        title: theme.description ?? theme.label ?? theme.id,
+        icon: this._buildThemeSwatchIcon(theme),
+        display: 'icon-label',
+        run: (runtimeApi) => runtimeApi.setTheme(theme.id),
+        isActive: (state) => state.theme === theme.id,
+      })),
+    ];
+
+    return {
+      id: 'theme',
+      order: 10_000,
+      items: [
+        {
+          type: 'dropdown',
+          id: 'theme-selector',
+          label: 'Theme',
+          title: 'Select editor theme',
+          icon: this._buildThemeDropdownIcon(),
+          display: 'icon-label',
+          items: themeEntries,
+        },
+      ],
+    };
+  }
+
+  _buildThemeDropdownIcon() {
+    return '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1a5 5 0 0 0 0 10c.7 0 1.2.57 1.2 1.27 0 .62-.42 1.15-1.02 1.27A6.5 6.5 0 1 1 14.5 8c0 .45-.37.82-.82.82H12.5a.7.7 0 0 0-.7.7c0 .7-.57 1.27-1.27 1.27H8.7a2 2 0 0 1-2-2C6.7 7.25 7.95 6 9.5 6h2.2a.7.7 0 0 0 .7-.7A4.4 4.4 0 0 0 8 1Zm-3 5.1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm3.1-1A1 1 0 1 0 8.1 3a1 1 0 0 0 0 2.1Zm3 1A1 1 0 1 0 11.1 4a1 1 0 0 0 0 2.1Z"/></svg>';
+  }
+
+  _buildAutoThemeIcon() {
+    return '<svg class="se-theme-auto-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#9ca3af"/><path d="M8 2a6 6 0 0 1 0 12Z" fill="#111827"/></svg>';
+  }
+
+  _buildThemeSwatchIcon(theme) {
+    const swatch = theme?.swatch ?? {};
+    const bg = swatch.bg ?? '#ffffff';
+    const accent = swatch.accent ?? '#3b82f6';
+    const border = swatch.border ?? '#d0d7de';
+
+    return `<svg class="se-theme-swatch-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.2" y="1.2" width="13.6" height="13.6" rx="3" fill="${bg}" stroke="${border}" stroke-width="1.2"/><circle cx="11.5" cy="4.5" r="2.1" fill="${accent}"/></svg>`;
   }
 
   _normalizeGroup(group, fallbackId, index) {
@@ -527,6 +593,7 @@ export class Toolbar {
       selection,
       markdown: api.getMarkdown(),
       cursorLine: selection?.lineFrom ?? 0,
+      theme: typeof api.getTheme === 'function' ? api.getTheme() : 'auto',
     };
   }
 }

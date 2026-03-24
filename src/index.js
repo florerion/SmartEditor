@@ -14,6 +14,7 @@
 
 export { EditorCore } from './core/EditorCore.js';
 export { SmartEditorElement } from './adapters/WebComponent.js';
+export { EDITOR_THEME_PRESETS, getEditorThemeList } from './styles/themes.js';
 import { EditorCore as _EditorCore } from './core/EditorCore.js';
 
 /**
