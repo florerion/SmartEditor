@@ -382,9 +382,29 @@ export class CodePanel {
             height: '100%',
             fontSize: '14px',
             fontFamily: 'var(--se-font-mono, "Fira Code","Cascadia Code",Consolas,monospace)',
+            color: 'var(--se-color-text, #1a1a1a)',
+            backgroundColor: 'var(--se-color-bg, #ffffff)',
           },
-          '.cm-scroller': { overflow: 'auto' },
+          '.cm-editor': {
+            backgroundColor: 'var(--se-color-bg, #ffffff)',
+          },
+          '.cm-scroller': {
+            overflow: 'auto',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--se-color-scrollbar-thumb, #c4ccd5) var(--se-color-scrollbar-track, #eef1f4)',
+          },
+          '.cm-gutters': {
+            backgroundColor: 'var(--se-color-code-bg, #f6f8fa)',
+            color: 'var(--se-color-muted, #6b7280)',
+            borderRight: '1px solid var(--se-color-border, #d0d7de)',
+          },
           '.cm-content': { padding: '8px 0' },
+          '.cm-activeLine': {
+            backgroundColor: 'color-mix(in srgb, var(--se-color-accent, #3b82f6) 12%, transparent)',
+          },
+          '.cm-activeLineGutter': {
+            backgroundColor: 'color-mix(in srgb, var(--se-color-accent, #3b82f6) 16%, var(--se-color-code-bg, #f6f8fa))',
+          },
           '.cm-se-collapse-widget': {
             color: 'var(--se-color-muted, #6b7280)',
             fontStyle: 'italic',

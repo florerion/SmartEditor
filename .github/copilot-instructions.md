@@ -34,6 +34,13 @@
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
 - Prefer declarative toolbar composition through `opts.toolbar` for visibility/order/group/display concerns; treat action `group/order` as fallback defaults.
 - For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.
+- Keep built-in theme definitions centralized in `src/styles/themes.js`; when adding a new built-in preset, include full token set and `swatch` metadata.
+- Keep theme CSS generation centralized via `buildEditorThemeStyles()`; avoid reintroducing hardcoded per-theme blocks in `src/styles/editorStyles.js`.
+- Preserve runtime theme API semantics in `EditorCore`: `setTheme`, `getTheme`, `getAvailableThemes`.
+- Preserve toolbar theme selector UX:
+	- default fallback toolbar includes a `Theme` dropdown generated from available themes,
+	- entries use swatch icon + label,
+	- trigger highlights only while dropdown is open (not persistently just because one item is active).
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.

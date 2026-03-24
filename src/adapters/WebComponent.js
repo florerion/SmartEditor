@@ -6,7 +6,7 @@ import { EditorCore } from '../core/EditorCore.js';
  * Attributes (all optional):
  *   value   Initial markdown content
  *   mode    'split' | 'code' | 'preview' | 'wysiwyg'   (default: 'split')
- *   theme   'light' | 'dark' | 'auto'      (default: 'auto')
+ *   theme   'auto' or one of the built-in theme ids      (default: 'auto')
  *
  * DOM Events emitted:
  *   se-change           CustomEvent({ detail: { markdown, tokens, html } })
@@ -74,7 +74,7 @@ export class SmartEditorElement extends HTMLElement {
     if (!this._editor || oldVal === newVal) return;
     if (name === 'value') this._editor.setMarkdown(newVal, { undoable: false });
     if (name === 'mode')  this._editor.setMode(newVal);
-    if (name === 'theme') this._editor.getMode && this._editor._root?.setAttribute('data-theme', newVal);
+    if (name === 'theme') this._editor.setTheme(newVal ?? 'auto');
   }
 
   // Proxy all public EditorCore methods onto the element itself
@@ -96,6 +96,9 @@ export class SmartEditorElement extends HTMLElement {
   focus()                   { this._editor?.focus(); }
   setMode(mode)             { this._editor?.setMode(mode); }
   getMode()                 { return this._editor?.getMode(); }
+  setTheme(theme)           { return this._editor?.setTheme(theme); }
+  getTheme()                { return this._editor?.getTheme(); }
+  getAvailableThemes()      { return this._editor?.getAvailableThemes(); }
   destroy()                 { this._editor?.destroy(); this._editor = null; }
 }
 

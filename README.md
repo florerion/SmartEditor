@@ -104,7 +104,7 @@ Importing the library registers the custom element as a side effect.
 | `value` | `string` | `''` | Initial markdown content. |
 | `mode` | `'split' \| 'code' \| 'preview' \| 'wysiwyg'` | `'split'` | Initial view mode (`wysiwyg` is preview-first beta mode). |
 | `scrollSync` | `boolean` | `true` | In `split` mode, synchronizes vertical scrolling between code and preview using smooth animated follow. |
-| `theme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Theme hint (`data-theme` on root). |
+| `theme` | `'auto' \| 'light' \| 'dark' \| 'sepia' \| 'midnight' \| 'solarized' \| 'nord' \| 'high-contrast'` | `'auto'` | Theme id applied to the editor root. `auto` follows the OS color scheme; the built-in presets can also be switched at runtime. |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
 | `upload.endpoint` | `string` | `undefined` | Image upload endpoint (`POST`, expects `{ url }`). |
@@ -143,6 +143,27 @@ const editor = createEditor('#editor', {
 });
 ```
 
+### Example: theme selection
+
+```js
+const editor = createEditor('#editor', {
+  theme: 'sepia',
+});
+
+editor.setTheme('midnight');
+console.log(editor.getAvailableThemes());
+```
+
+Built-in presets:
+
+- `light`: neutral bright UI
+- `dark`: neutral dark UI
+- `sepia`: warm reading theme for long-form writing
+- `midnight`: cool dark coding theme with stronger contrast
+- `solarized`: classic balanced palette inspired by Solarized
+- `nord`: cool arctic dark palette
+- `high-contrast`: accessibility-focused very high contrast variant
+
 ## Runtime API
 
 Returned editor instance (or `<smart-editor>` proxies) provides:
@@ -162,6 +183,9 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `focus` | `()` | Focus code editor. |
 | `setMode` | `(mode)` | Switch mode: `split`, `code`, `preview`, `wysiwyg`. |
 | `getMode` | `() => mode` | Read current mode. |
+| `setTheme` | `(theme) => string` | Switch theme to `auto` or one of the registered built-in theme ids. |
+| `getTheme` | `() => string` | Read current theme id. |
+| `getAvailableThemes` | `() => { id, label, description, scheme }[]` | List built-in theme metadata for selectors/settings UIs. |
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
 | `getToolbarConfig` | `() => object \| null` | Get the current declarative toolbar config, if one is active. |
@@ -197,6 +221,17 @@ await editor.proposeChange(' inserted chunk ', { mode: 'insert-at-cursor' });
 
 - `replace-selection` falls back to `insert-at-cursor` when no text is selected.
 - In `insert-at-cursor`, insertion happens at the end of the current selection/cursor (`selection.to`).
+
+### Theme helpers export
+
+```js
+import { EDITOR_THEME_PRESETS, getEditorThemeList } from 'md-wysiwyg-editor';
+
+console.log(Object.keys(EDITOR_THEME_PRESETS));
+console.log(getEditorThemeList());
+```
+
+If you want to add another built-in theme in the source tree, define its token set in `src/styles/themes.js`; the editor stylesheet consumes that registry automatically.
 
 ## Events and Callback Usage
 
