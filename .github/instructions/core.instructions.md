@@ -26,6 +26,12 @@ applyTo: "src/core/**"
 	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,
 	- insert mode uses `selection.to`.
+- For `replace-all` propose previews, compute and highlight only the true changed span (trim shared prefix/suffix); avoid reverting to full-document highlight.
+- Keep compatibility orchestration in `EditorCore` aligned with `CompatibilityService` contract (`validate`, `buildBatchFix`, profile switching).
+- Preserve compatibility APIs and status wiring:
+	- `getCompatibilityReport`, `getCompatibilityStatus`, `isCompatibilityEnabled`,
+	- `setCompatibilityEnabled`, `setCompatibilityProfile`, `validateCompatibility`,
+	- `proposeCompatibilityFix`, `proposeAllCompatibilityFixes`.
 - Keep naming conventions stable in core-generated markup and selectors:
 	- CSS/UI classes use `se-*`,
 	- custom properties use `--se-*`,

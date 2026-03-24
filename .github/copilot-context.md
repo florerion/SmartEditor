@@ -15,6 +15,7 @@ Purpose: portable project context for switching machines/accounts/subscriptions.
 - UI class prefix: `se-*` (legacy `mde-*` class names removed)
 - CSS custom properties: `--se-*` (legacy `--mde-*` removed)
 - Web Component events: `se-change`, `se-selection-change`, `se-preview-click`
+- Additional compatibility events: `se-compatibility-report`, `se-compatibility-status-change`, `se-compatibility-fix-applied`
 
 ## What This Project Is
 Framework-agnostic Markdown editor with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, and code-preview source-line synchronization.
@@ -24,6 +25,7 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Core orchestrator: `src/core/EditorCore.js`
 - Markdown parser wrapper: `src/core/Parser.js`
 - Source/preview sync logic: `src/core/Sync.js`
+- Compatibility orchestration: `src/core/compat/*`
 - UI components: `src/ui/*`
 - Built-in actions/plugins: `src/plugins/*`
 - Integrations: `src/adapters/WebComponent.js`, `src/adapters/react/*`
@@ -78,6 +80,32 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Style composition:
   - `src/styles/editorStyles.js` consumes tokens and injects generated theme CSS via `buildEditorThemeStyles()`,
   - `auto` maps to OS dark preference only when `data-theme` is not set.
+- Compatibility panel status colors and scrollbars are theme-token driven (`--se-color-compat-*`, `--se-color-scrollbar-*`).
+
+## Compatibility Snapshot (Current)
+- Compatibility engine is integrated in `EditorCore` with:
+  - `CompatibilityService` (`src/core/compat/CompatibilityService.js`),
+  - profile factories (`src/core/compat/CompatibilityProfiles.js`),
+  - table rule (`src/core/compat/rules/TableCompatibilityRule.js`).
+- Default compatibility profile is Eleventy-like and supports:
+  - markdown-it options (`html`, `breaks`, `linkify`),
+  - disabled rules (`disableRules`, default `['emphasis']`),
+  - plugin injection via `compatibility.plugins`,
+  - Eleventy-style image resize markers from alt text (`#320px`, `#50%`).
+- `EditorCore` compatibility APIs:
+  - `getCompatibilityReport`, `getCompatibilityStatus`, `isCompatibilityEnabled`,
+  - `setCompatibilityEnabled`, `setCompatibilityProfile`, `validateCompatibility`,
+  - `proposeCompatibilityFix`, `proposeAllCompatibilityFixes`.
+- Compatibility issue panel (`src/ui/CompatibilityPanel.js`):
+  - status badge + summary + fix actions,
+  - per-issue code badge,
+  - click issue text to jump to source line,
+  - scrollable issue list viewport (about three visible rows) with themed scrollbar.
+- Table compatibility issue codes:
+  - `table.missing-leading-pipe`
+  - `table.missing-trailing-pipe`
+  - `table.column-count-mismatch`
+  - `table.invalid-separator-row`
 
 ## draw.io Snapshot (Current)
 - Markdown serialization for draw.io is now one-line only:
@@ -156,6 +184,8 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
   - red-highlight in current document,
   - green-highlight in proposed document,
   - cursor marker for insert mode.
+- Replace-all diff highlight was refined to mark only the true changed span
+  (common prefix/suffix trimmed), while keeping both columns on neutral background.
 - Files involved:
   - `src/core/EditorCore.js`
   - `src/ui/DiffModal.js`
@@ -200,4 +230,4 @@ Use this project context and instruction files as the source of truth. Before ma
 
 ## Last Updated
 - Date: 2026-03-24
-- Reason: added centralized multi-theme system, built-in toolbar theme selector (with swatches), and refined dropdown trigger highlight behavior.
+- Reason: added Eleventy compatibility MVP (profiles, validation, table issue codes, fix panel with scroll/jump) and refined propose diff highlighting to changed spans only.
