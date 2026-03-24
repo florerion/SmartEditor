@@ -11,6 +11,7 @@
 - Public entrypoint is `src/index.js` (`createEditor`, `EditorCore`, `SmartEditorElement`).
 - `src/core/EditorCore.js` is the orchestrator that wires State, Parser, Sync, toolbar, code panel, and preview panel.
 - `src/core/Parser.js` wraps `markdown-it` and injects `data-source-line` attributes used for code-preview sync.
+- `src/core/compat/` contains publishing compatibility logic (`CompatibilityService`, profile factories, and rules).
 - `src/ui/` contains UI building blocks (`CodePanel`, `PreviewPanel`, `Toolbar`, dialogs/modals).
 - `src/plugins/` contains built-in toolbar actions; keep new behavior as actions when possible.
 - `src/adapters/` contains integration layers (`WebComponent`, React adapter).
@@ -29,6 +30,9 @@
 	- `se-change`
 	- `se-selection-change`
 	- `se-preview-click`
+	- `se-compatibility-report`
+	- `se-compatibility-status-change`
+	- `se-compatibility-fix-applied`
 - Preserve sync mapping behavior: keep `data-source-line` / `data-source-line-end` support intact across parser and preview.
 - If introducing new HTML attributes needed in preview, update DOMPurify allowlist in `src/ui/PreviewPanel.js`.
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
@@ -36,6 +40,7 @@
 - For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.
 - Keep built-in theme definitions centralized in `src/styles/themes.js`; when adding a new built-in preset, include full token set and `swatch` metadata.
 - Keep theme CSS generation centralized via `buildEditorThemeStyles()`; avoid reintroducing hardcoded per-theme blocks in `src/styles/editorStyles.js`.
+- Keep compatibility panel status colors tokenized through theme variables (`--se-color-compat-*`); avoid hardcoded status colors in panel CSS.
 - Preserve runtime theme API semantics in `EditorCore`: `setTheme`, `getTheme`, `getAvailableThemes`.
 - Preserve toolbar theme selector UX:
 	- default fallback toolbar includes a `Theme` dropdown generated from available themes,
@@ -51,7 +56,19 @@
 	- supported modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- `replace-selection` falls back to `insert-at-cursor` when selection is empty,
 	- cursor insert uses `selection.to` (end of selection/cursor).
-- Diff modal for `proposeChange` should compare full document snapshots and highlight the changed target range (old/new), with cursor marker for insert mode.
+- Diff modal for `proposeChange` should compare full document snapshots and highlight only true changed ranges (old/new), with cursor marker for insert mode and neutral non-changed column background.
+
+## Compatibility MVP
+- Default compatibility profile is Eleventy-like (`createEleventyCompatibilityProfile`) and supports markdown-it options, disabled rules, and plugin injection.
+- Keep table compatibility issue codes stable:
+	- `table.missing-leading-pipe`
+	- `table.missing-trailing-pipe`
+	- `table.column-count-mismatch`
+	- `table.invalid-separator-row`
+- Keep compatibility issue panel behavior stable:
+	- list is scrollable (viewport around three items visible),
+	- issue text click jumps to source line/selection,
+	- fix actions remain mediated by propose/diff acceptance flow.
 
 ## Scroll Sync
 - Split-mode bidirectional vertical scroll sync is implemented in `EditorCore` (`_handleCodePanelScroll`, `_handlePreviewPanelScroll`).

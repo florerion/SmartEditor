@@ -97,9 +97,21 @@
   <pre id="log"></pre>
 
   <script type="module">
-    import { createEditor, getEditorThemeList } from '../dist/smart-editor.esm.js';
+    import {
+      createEditor,
+      createEleventyCompatibilityProfile,
+      getEditorThemeList,
+    } from '../dist/smart-editor.esm.js';
 
     const BUILT_IN_THEMES = getEditorThemeList();
+    const compatibilityProfile = createEleventyCompatibilityProfile({
+      markdownIt: {
+        html: true,
+        breaks: true,
+        linkify: true,
+      },
+      disableRules: ['emphasis'],
+    });
 
     // ------------------------------------------------------------------ //
     // Initial content
@@ -343,6 +355,11 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       value: DEMO,
       mode: 'split',
       toolbar: buildToolbarConfig(),
+      compatibility: {
+        enabled: true,
+        showPanel: true,
+        profile: compatibilityProfile,
+      },
       drawio: {
         // Local demo is served from /demo, while bundled draw.io lives in /dist/drawio.
         // Directory URL keeps draw.io relative assets under /dist/drawio/.
@@ -359,6 +376,18 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
 
       onPreviewClick(el, range) {
         log(`previewClick → linia ${range.from}`);
+      },
+
+      onCompatibilityStatusChange(status, report) {
+        log(`compatibility (${report.profileId}) → ${status} (issues: ${report.summary.total})`);
+      },
+
+      onCompatibilityFixApplied(detail) {
+        if (detail.type === 'batch') {
+          log(`compatibility fix all → ${detail.changeCount} changes`);
+          return;
+        }
+        log(`compatibility fix → ${detail.issueId}`);
       },
     });
 

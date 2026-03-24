@@ -12,6 +12,9 @@ import { EditorCore } from '../core/EditorCore.js';
  *   se-change           CustomEvent({ detail: { markdown, tokens, html } })
  *   se-selection-change CustomEvent({ detail: selInfo })
  *   se-preview-click    CustomEvent({ detail: { element, lineRange } })
+ *   se-compatibility-report        CustomEvent({ detail: report })
+ *   se-compatibility-status-change CustomEvent({ detail: { status, report } })
+ *   se-compatibility-fix-applied   CustomEvent({ detail: payload })
  *
  * All EditorCore public methods are proxied directly on the element.
  *
@@ -62,6 +65,27 @@ export class SmartEditorElement extends HTMLElement {
           detail: { element, lineRange },
         }));
       },
+
+      onCompatibilityReport: (report) => {
+        this.dispatchEvent(new CustomEvent('se-compatibility-report', {
+          bubbles: true, composed: true,
+          detail: report,
+        }));
+      },
+
+      onCompatibilityStatusChange: (status, report) => {
+        this.dispatchEvent(new CustomEvent('se-compatibility-status-change', {
+          bubbles: true, composed: true,
+          detail: { status, report },
+        }));
+      },
+
+      onCompatibilityFixApplied: (payload) => {
+        this.dispatchEvent(new CustomEvent('se-compatibility-fix-applied', {
+          bubbles: true, composed: true,
+          detail: payload,
+        }));
+      },
     });
   }
 
@@ -91,6 +115,14 @@ export class SmartEditorElement extends HTMLElement {
   runCommand(id, args)      { return this._editor?.runCommand(id, args); }
   openDrawioEditor(opts)     { return this._editor?.openDrawioEditor(opts); }
   proposeChange(md, opts)   { return this._editor?.proposeChange(md, opts); }
+  getCompatibilityReport()  { return this._editor?.getCompatibilityReport(); }
+  getCompatibilityStatus()  { return this._editor?.getCompatibilityStatus(); }
+  isCompatibilityEnabled()  { return this._editor?.isCompatibilityEnabled(); }
+  setCompatibilityEnabled(v) { return this._editor?.setCompatibilityEnabled(v); }
+  setCompatibilityProfile(p) { return this._editor?.setCompatibilityProfile(p); }
+  validateCompatibility(opts) { return this._editor?.validateCompatibility(opts); }
+  proposeCompatibilityFix(issueId) { return this._editor?.proposeCompatibilityFix(issueId); }
+  proposeAllCompatibilityFixes() { return this._editor?.proposeAllCompatibilityFixes(); }
   undo()                    { this._editor?.undo(); }
   redo()                    { this._editor?.redo(); }
   focus()                   { this._editor?.focus(); }

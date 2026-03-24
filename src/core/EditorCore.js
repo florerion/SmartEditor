@@ -9,6 +9,9 @@ import { Toolbar } from '../ui/Toolbar.js';
 import { ImageResize } from '../ui/ImageResize.js';
 import { DiffModal } from '../ui/DiffModal.js';
 import { DrawioModal } from '../ui/DrawioModal.js';
+import { CompatibilityPanel } from '../ui/CompatibilityPanel.js';
+import { CompatibilityService } from './compat/CompatibilityService.js';
+import { createEleventyCompatibilityProfile } from './compat/CompatibilityProfiles.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
 import { registerDefaultActions } from '../plugins/index.js';
@@ -46,6 +49,16 @@ export class EditorCore {
   *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
    *                                                to use the public hosted version instead.
   * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
+  * @param {object}      [opts.compatibility]
+  * @param {boolean}     [opts.compatibility.enabled=false] Enable compatibility validation + fix proposals
+  * @param {boolean}     [opts.compatibility.showPanel=false] Show compatibility status panel above panes
+  * @param {number}      [opts.compatibility.debounce=500] Debounce for validation while typing
+  * @param {boolean}     [opts.compatibility.showPreviewUsingProfile=false] Render preview using compatibility profile HTML
+  * @param {object}      [opts.compatibility.markdownIt] markdown-it options for default Eleventy compatibility profile
+  * @param {Array}       [opts.compatibility.plugins] markdown-it plugins for default Eleventy compatibility profile
+  * @param {string[]}    [opts.compatibility.disableRules] markdown-it rules disabled in compatibility profile
+  * @param {object}      [opts.compatibility.profile] Compatibility profile with render(markdown) method
+  * @param {Array}       [opts.compatibility.rules] Validation/fix rule instances
    * @param {Function}    [opts.onChange]           (markdown, tokens, html) => void
    * @param {Function}    [opts.onSelectionChange]  (selInfo) => void
    * @param {Function}    [opts.onPaste]            (clipboardEvent) => void
@@ -54,6 +67,9 @@ export class EditorCore {
    * @param {Function}    [opts.onUploadError]      (file, error) => void
    * @param {Function}    [opts.onPreviewClick]     (element, lineRange) => void
    * @param {Function}    [opts.onCommand]          (commandId, args) => void
+  * @param {Function}    [opts.onCompatibilityReport]      (report) => void
+  * @param {Function}    [opts.onCompatibilityStatusChange] (status, report) => void
+  * @param {Function}    [opts.onCompatibilityFixApplied]   (detail) => void
    */
   constructor(element, opts = {}) {
     this._root = element;
@@ -66,6 +82,7 @@ export class EditorCore {
     });
     this._sync = new Sync();
     this._previewDebounce = null;
+    this._compatibilityDebounce = null;
     this._mode = opts.mode ?? 'split';
     this._scrollSyncEnabled = opts.scrollSync !== false;
     this._scrollSyncSource = null;
@@ -76,6 +93,27 @@ export class EditorCore {
     this._previewScrollRaf = null;
     this._selectedPreviewImageEl = null;
     this._theme = 'auto';
+    this._compatibilityEnabled = opts.compatibility?.enabled === true;
+    this._compatibilityDebounceMs = Number.isFinite(opts.compatibility?.debounce)
+      ? Math.max(0, opts.compatibility.debounce)
+      : 500;
+    this._compatibilityPreviewEnabled = opts.compatibility?.showPreviewUsingProfile === true;
+    this._compatibilityStatus = 'disabled';
+    this._compatibilityReport = _createDisabledCompatibilityReport();
+    this._compatibilityShowPanel = opts.compatibility?.showPanel === true || this._compatibilityEnabled;
+    this._compatibilityPanelBusy = false;
+
+    const compatibilityProfile = opts.compatibility?.profile
+      ?? createEleventyCompatibilityProfile({
+        markdownIt: opts.compatibility?.markdownIt ?? opts.markdown?.options ?? {},
+        plugins: opts.compatibility?.plugins ?? opts.markdown?.plugins ?? [],
+        disableRules: opts.compatibility?.disableRules,
+      });
+
+    this._compatibilityService = new CompatibilityService({
+      profile: compatibilityProfile,
+      rules: opts.compatibility?.rules,
+    });
 
     this._diffModal = new DiffModal();
     this._drawioModal = new DrawioModal({ url: opts.drawio?.url });
@@ -85,6 +123,7 @@ export class EditorCore {
     this._buildCodePanel();
     this._buildPreviewPanel();
     this._buildToolbar();
+    this._buildCompatibilityPanel();
     this._buildImageHandler();
 
     registerDefaultActions(this._toolbar);
@@ -92,6 +131,9 @@ export class EditorCore {
 
     // Initial render
     this._updatePreview(this._state.value);
+    if (this._compatibilityEnabled) {
+      this.validateCompatibility({ force: true, emitStatusChange: false });
+    }
   }
 
   // ============================================================
@@ -112,6 +154,7 @@ export class EditorCore {
     this._state.setValue(markdown, { undoable });
     this._codePanel.setValue(markdown, undoable);
     this._updatePreview(markdown);
+    this._scheduleCompatibilityValidation();
   }
 
   /** @returns {object[]} Full markdown-it token array */
@@ -464,12 +507,146 @@ export class EditorCore {
     return false;
   }
 
+  /** @returns {object} Latest compatibility report. */
+  getCompatibilityReport() {
+    return this._compatibilityReport;
+  }
+
+  /** @returns {'disabled'|'valid'|'warning'|'invalid'} */
+  getCompatibilityStatus() {
+    return this._compatibilityStatus;
+  }
+
+  /** @returns {boolean} */
+  isCompatibilityEnabled() {
+    return this._compatibilityEnabled;
+  }
+
+  /**
+   * @param {boolean} enabled
+   * @returns {object} Latest compatibility report
+   */
+  setCompatibilityEnabled(enabled) {
+    this._compatibilityEnabled = enabled === true;
+    if (!this._compatibilityEnabled) {
+      const prevStatus = this._compatibilityStatus;
+      this._compatibilityStatus = 'disabled';
+      this._compatibilityReport = _createDisabledCompatibilityReport();
+      this._opts.onCompatibilityReport?.(this._compatibilityReport);
+      if (prevStatus !== 'disabled') {
+        this._opts.onCompatibilityStatusChange?.('disabled', this._compatibilityReport);
+      }
+      this._renderCompatibilityPanel();
+      return this._compatibilityReport;
+    }
+
+    return this.validateCompatibility({ force: true });
+  }
+
+  /**
+   * @param {object} profile
+   * @returns {object} Latest compatibility report
+   */
+  setCompatibilityProfile(profile) {
+    this._compatibilityService.setProfile(profile);
+    if (!this._compatibilityEnabled) return this._compatibilityReport;
+    return this.validateCompatibility({ force: true });
+  }
+
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.force=false] Run even when compatibility mode is disabled
+   * @param {boolean} [opts.emitStatusChange=true] Emit status-change callback when status changes
+   * @returns {object}
+   */
+  validateCompatibility(opts = {}) {
+    const force = opts.force === true;
+    if (!force && !this._compatibilityEnabled) {
+      return this._compatibilityReport;
+    }
+
+    const report = this._compatibilityService.validate(this.getMarkdown());
+    this._setCompatibilityReport(report, { emitStatusChange: opts.emitStatusChange !== false });
+
+    if (
+      this._compatibilityPreviewEnabled
+      && typeof report.previewHtml === 'string'
+      && !report.renderError
+    ) {
+      this._setSelectedPreviewImage(null);
+      this._previewPanel.render(report.previewHtml);
+      this._imageResize?.attachHandlers();
+    }
+
+    return report;
+  }
+
+  /**
+   * Propose and optionally apply a single compatibility fix.
+   *
+   * @param {string} issueId
+   * @returns {Promise<boolean>} true when fix was applied
+   */
+  async proposeCompatibilityFix(issueId) {
+    this._setCompatibilityPanelBusy(true);
+    try {
+      const report = this.validateCompatibility({ force: true });
+      const issue = report.issues?.find((entry) => entry.id === issueId);
+      if (!issue) {
+        throw new Error(`[EditorCore] Compatibility issue not found: ${issueId}`);
+      }
+      if (!issue.fixable || !issue.fix?.nextMarkdown) {
+        throw new Error(`[EditorCore] Compatibility issue is not fixable: ${issueId}`);
+      }
+
+      const accepted = await this.proposeChange(issue.fix.nextMarkdown, { mode: 'replace-all' });
+      if (!accepted) return false;
+
+      this._opts.onCompatibilityFixApplied?.({
+        type: 'single',
+        issueId,
+        code: issue.code,
+      });
+
+      this.validateCompatibility({ force: true });
+      return true;
+    } finally {
+      this._setCompatibilityPanelBusy(false);
+    }
+  }
+
+  /**
+   * Propose one combined fix for all fixable compatibility issues.
+   * @returns {Promise<boolean>} true when fix was applied
+   */
+  async proposeAllCompatibilityFixes() {
+    this._setCompatibilityPanelBusy(true);
+    try {
+      const fix = this._compatibilityService.buildBatchFix(this.getMarkdown());
+      if (!fix?.nextMarkdown) return false;
+
+      const accepted = await this.proposeChange(fix.nextMarkdown, { mode: 'replace-all' });
+      if (!accepted) return false;
+
+      this._opts.onCompatibilityFixApplied?.({
+        type: 'batch',
+        changeCount: fix.changeCount ?? 0,
+      });
+
+      this.validateCompatibility({ force: true });
+      return true;
+    } finally {
+      this._setCompatibilityPanelBusy(false);
+    }
+  }
+
   _buildProposedDocument(current, nextChunk, mode, selection) {
     if (mode === 'replace-all') {
+      const spans = _computeChangedSpans(current, nextChunk);
       return {
         nextDocument: nextChunk,
-        oldHighlight: { from: 0, to: current.length },
-        newHighlight: { from: 0, to: nextChunk.length },
+        oldHighlight: spans.oldHighlight,
+        newHighlight: spans.newHighlight,
       };
     }
 
@@ -494,6 +671,7 @@ export class EditorCore {
   /** Detach editor and clean up resources. */
   destroy() {
     clearTimeout(this._previewDebounce);
+    clearTimeout(this._compatibilityDebounce);
     clearTimeout(this._scrollSyncReleaseTimer);
     clearTimeout(this._scrollSyncDebounceTimer);
     cancelAnimationFrame(this._codeScrollRaf);
@@ -501,6 +679,7 @@ export class EditorCore {
     this._codePanel.destroy();
     this._previewPanel.destroy();
     this._toolbar?.destroy();
+    this._compatibilityPanel?.destroy();
     this._imageHandler?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
@@ -535,6 +714,7 @@ export class EditorCore {
     this._root.innerHTML = `
       <div class="se-layout">
         <div class="se-toolbar-container"></div>
+        <div class="se-compatibility-container"></div>
         <div class="se-wysiwyg-beta">WYSIWYG beta: visual mode is preview-first in this build.</div>
         <div class="se-panels">
           <div class="se-panel se-panel--code"></div>
@@ -545,6 +725,7 @@ export class EditorCore {
     `;
 
     this._toolbarContainer = this._root.querySelector('.se-toolbar-container');
+    this._compatibilityPanelEl = this._root.querySelector('.se-compatibility-container');
     this._codePanelEl = this._root.querySelector('.se-panel--code');
     this._previewPanelEl = this._root.querySelector('.se-panel--preview');
 
@@ -565,6 +746,7 @@ export class EditorCore {
           const { tokens, html } = this._parser.render(value);
           this._opts.onChange(value, tokens, html);
         }
+        this._scheduleCompatibilityValidation();
       },
 
       onCursorMove: (line) => {
@@ -673,6 +855,40 @@ export class EditorCore {
     this._toolbar.registerAction(createImageUploadAction(this._imageHandler));
   }
 
+  _buildCompatibilityPanel() {
+    if (!this._compatibilityShowPanel || !this._compatibilityPanelEl) {
+      this._compatibilityPanelEl?.classList.add('se-compatibility-container--hidden');
+      return;
+    }
+
+    this._compatibilityPanel = new CompatibilityPanel(this._compatibilityPanelEl, {
+      onFixIssue: async (issueId) => {
+        try {
+          await this.proposeCompatibilityFix(issueId);
+        } catch (error) {
+          console.warn('[EditorCore] Compatibility fix failed:', error);
+          this._setCompatibilityPanelBusy(false);
+        }
+      },
+      onFixAll: async () => {
+        try {
+          await this.proposeAllCompatibilityFixes();
+        } catch (error) {
+          console.warn('[EditorCore] Compatibility batch fix failed:', error);
+          this._setCompatibilityPanelBusy(false);
+        }
+      },
+      onEnable: () => {
+        this.setCompatibilityEnabled(true);
+      },
+      onJumpIssue: (issueId) => {
+        this._jumpToCompatibilityIssue(issueId);
+      },
+    });
+
+    this._renderCompatibilityPanel();
+  }
+
   // ============================================================
   // Private — rendering
   // ============================================================
@@ -680,6 +896,14 @@ export class EditorCore {
   _schedulePreviewUpdate(value) {
     clearTimeout(this._previewDebounce);
     this._previewDebounce = setTimeout(() => this._updatePreview(value), 150);
+  }
+
+  _scheduleCompatibilityValidation() {
+    if (!this._compatibilityEnabled) return;
+    clearTimeout(this._compatibilityDebounce);
+    this._compatibilityDebounce = setTimeout(() => {
+      this.validateCompatibility({ force: true });
+    }, this._compatibilityDebounceMs);
   }
 
   _updatePreview(markdown) {
@@ -941,8 +1165,68 @@ export class EditorCore {
       setTheme: (theme) => this.setTheme(theme),
       getAvailableThemes: () => this.getAvailableThemes(),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
+      getCompatibilityReport: () => this.getCompatibilityReport(),
+      getCompatibilityStatus: () => this.getCompatibilityStatus(),
+      isCompatibilityEnabled: () => this.isCompatibilityEnabled(),
+      setCompatibilityEnabled: (enabled) => this.setCompatibilityEnabled(enabled),
+      setCompatibilityProfile: (profile) => this.setCompatibilityProfile(profile),
+      validateCompatibility: (opts) => this.validateCompatibility(opts),
+      proposeCompatibilityFix: (issueId) => this.proposeCompatibilityFix(issueId),
+      proposeAllCompatibilityFixes: () => this.proposeAllCompatibilityFixes(),
       focus: () => this.focus(),
     };
+  }
+
+  _setCompatibilityReport(report, opts = {}) {
+    const prevStatus = this._compatibilityStatus;
+    const nextStatus = report?.status ?? 'valid';
+
+    this._compatibilityReport = report;
+    this._compatibilityStatus = nextStatus;
+
+    this._opts.onCompatibilityReport?.(report);
+    if (opts.emitStatusChange !== false && prevStatus !== nextStatus) {
+      this._opts.onCompatibilityStatusChange?.(nextStatus, report);
+    }
+
+    this._renderCompatibilityPanel();
+  }
+
+  _setCompatibilityPanelBusy(nextBusy) {
+    this._compatibilityPanelBusy = nextBusy === true;
+    this._renderCompatibilityPanel();
+  }
+
+  _renderCompatibilityPanel() {
+    if (!this._compatibilityPanel) return;
+
+    this._compatibilityPanel.render({
+      enabled: this._compatibilityEnabled,
+      status: this._compatibilityStatus,
+      summary: this._compatibilityReport.summary,
+      issues: this._compatibilityReport.issues,
+      busy: this._compatibilityPanelBusy,
+    });
+  }
+
+  _jumpToCompatibilityIssue(issueId) {
+    const issue = this._compatibilityReport.issues?.find((entry) => entry.id === issueId);
+    if (!issue) return;
+
+    if (this._mode === 'preview' || this._mode === 'wysiwyg') {
+      this.setMode('split');
+    }
+
+    if (Number.isInteger(issue.from) && Number.isInteger(issue.to)) {
+      this.setSelection(issue.from, issue.to);
+    }
+
+    if (Number.isInteger(issue.lineFrom) && issue.lineFrom >= 0) {
+      this._codePanel.scrollToLine(issue.lineFrom);
+      return;
+    }
+
+    this.focus();
   }
 
   _setSelectedPreviewImage(nextImage) {
@@ -1103,4 +1387,57 @@ function _defaultDrawioImage() {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return `data:image/svg+xml;base64,${btoa(binary)}`;
+}
+
+function _createDisabledCompatibilityReport() {
+  return {
+    profileId: 'disabled',
+    profileLabel: 'Disabled',
+    generatedAt: Date.now(),
+    status: 'disabled',
+    summary: { total: 0, errors: 0, warnings: 0, fixable: 0 },
+    issues: [],
+    previewHtml: '',
+    renderError: null,
+  };
+}
+
+function _computeChangedSpans(oldText, newText) {
+  const oldValue = String(oldText ?? '');
+  const newValue = String(newText ?? '');
+  const oldLen = oldValue.length;
+  const newLen = newValue.length;
+
+  let prefix = 0;
+  const maxPrefix = Math.min(oldLen, newLen);
+  while (prefix < maxPrefix && oldValue.charCodeAt(prefix) === newValue.charCodeAt(prefix)) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  const maxSuffix = Math.min(oldLen - prefix, newLen - prefix);
+  while (
+    suffix < maxSuffix
+    && oldValue.charCodeAt(oldLen - 1 - suffix) === newValue.charCodeAt(newLen - 1 - suffix)
+  ) {
+    suffix += 1;
+  }
+
+  const oldFrom = prefix;
+  const oldTo = oldLen - suffix;
+  const newFrom = prefix;
+  const newTo = newLen - suffix;
+
+  if (oldFrom === oldTo && newFrom === newTo) {
+    return { oldHighlight: null, newHighlight: null };
+  }
+
+  return {
+    oldHighlight: oldFrom === oldTo
+      ? { from: oldFrom, to: oldTo, cursor: true }
+      : { from: oldFrom, to: oldTo },
+    newHighlight: newFrom === newTo
+      ? { from: newFrom, to: newTo, cursor: true }
+      : { from: newFrom, to: newTo },
+  };
 }

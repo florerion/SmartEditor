@@ -40,6 +40,18 @@ export const EDITOR_STYLES = `
   --se-color-danger-outline: rgba(220, 38, 38, 0.42);
   --se-color-success-soft: #f7fff8;
   --se-color-success-outline: rgba(22, 163, 74, 0.4);
+  --se-color-compat-valid-bg: #dcfce7;
+  --se-color-compat-valid-text: #166534;
+  --se-color-compat-valid-border: #86efac;
+  --se-color-compat-warning-bg: #fef3c7;
+  --se-color-compat-warning-text: #92400e;
+  --se-color-compat-warning-border: #fcd34d;
+  --se-color-compat-invalid-bg: #fee2e2;
+  --se-color-compat-invalid-text: #991b1b;
+  --se-color-compat-invalid-border: #fca5a5;
+  --se-color-compat-disabled-bg: #e5e7eb;
+  --se-color-compat-disabled-text: #374151;
+  --se-color-compat-disabled-border: #d1d5db;
 }
 
 .se-layout {
@@ -62,6 +74,198 @@ export const EDITOR_STYLES = `
   border-bottom: 1px solid var(--se-color-border, #d0d7de);
   user-select: none;
   flex-shrink: 0;
+}
+
+.se-compatibility-container--hidden {
+  display: none;
+}
+
+.se-compatibility {
+  border-bottom: 1px solid var(--se-color-border, #d0d7de);
+  background: color-mix(in srgb, var(--se-color-surface, #ffffff) 92%, var(--se-color-toolbar-bg, #f6f8fa));
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.se-compatibility__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.se-compatibility__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.se-compatibility__badge--valid {
+  color: var(--se-color-compat-valid-text, #166534);
+  background: var(--se-color-compat-valid-bg, #dcfce7);
+  border-color: var(--se-color-compat-valid-border, #86efac);
+}
+
+.se-compatibility__badge--warning {
+  color: var(--se-color-compat-warning-text, #92400e);
+  background: var(--se-color-compat-warning-bg, #fef3c7);
+  border-color: var(--se-color-compat-warning-border, #fcd34d);
+}
+
+.se-compatibility__badge--invalid {
+  color: var(--se-color-compat-invalid-text, #991b1b);
+  background: var(--se-color-compat-invalid-bg, #fee2e2);
+  border-color: var(--se-color-compat-invalid-border, #fca5a5);
+}
+
+.se-compatibility__badge--disabled {
+  color: var(--se-color-compat-disabled-text, #374151);
+  background: var(--se-color-compat-disabled-bg, #e5e7eb);
+  border-color: var(--se-color-compat-disabled-border, #d1d5db);
+}
+
+.se-compatibility__summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--se-color-muted, #6b7280);
+}
+
+.se-compatibility__actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.se-compatibility__btn,
+.se-compatibility__issue-fix {
+  border: 1px solid var(--se-color-border, #d0d7de);
+  background: var(--se-color-surface, #ffffff);
+  color: var(--se-color-text, #1a1a1a);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.se-compatibility__btn:hover,
+.se-compatibility__issue-fix:hover {
+  border-color: var(--se-color-accent, #3b82f6);
+  background: color-mix(in srgb, var(--se-color-accent, #3b82f6) 10%, var(--se-color-surface, #ffffff));
+}
+
+.se-compatibility__btn:disabled,
+.se-compatibility__issue-fix:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.se-compatibility__issues {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  max-height: 112px;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--se-color-scrollbar-thumb, #c4ccd5) var(--se-color-scrollbar-track, #eef1f4);
+}
+
+.se-compatibility__issues::-webkit-scrollbar {
+  width: 10px;
+}
+
+.se-compatibility__issues::-webkit-scrollbar-track {
+  background: var(--se-color-scrollbar-track, #eef1f4);
+  border-radius: 999px;
+}
+
+.se-compatibility__issues::-webkit-scrollbar-thumb {
+  background: var(--se-color-scrollbar-thumb, #c4ccd5);
+  border-radius: 999px;
+  border: 2px solid var(--se-color-scrollbar-track, #eef1f4);
+}
+
+.se-compatibility__issues::-webkit-scrollbar-thumb:hover {
+  background: var(--se-color-scrollbar-thumb-hover, #aeb8c2);
+}
+
+.se-compatibility__issue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--se-color-surface-muted, #f3f4f6);
+}
+
+.se-compatibility__issue-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.se-compatibility__issue-link:hover .se-compatibility__issue-text,
+.se-compatibility__issue-link:focus-visible .se-compatibility__issue-text {
+  text-decoration: underline;
+}
+
+.se-compatibility__issue-link:focus-visible {
+  outline: 2px solid var(--se-color-accent, #3b82f6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.se-compatibility__issue-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.se-compatibility__issue-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--se-color-border, #d0d7de);
+  background: color-mix(in srgb, var(--se-color-surface, #ffffff) 80%, var(--se-color-toolbar-bg, #f6f8fa));
+  color: var(--se-color-muted, #6b7280);
+  font-family: var(--se-font-mono, "Fira Code", Consolas, monospace);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.se-compatibility__issue-text {
+  font-size: 12px;
+  color: var(--se-color-text, #1a1a1a);
+  line-height: 1.35;
+}
+
+.se-compatibility__issue--empty {
+  justify-content: flex-start;
 }
 
 .se-toolbar__group {
@@ -748,8 +952,10 @@ ${buildEditorThemeStyles()}
   white-space: pre;
 }
 
-.se-diff__pre--old { background: var(--se-color-danger-soft, #fff7f7); }
-.se-diff__pre--new { background: var(--se-color-success-soft, #f7fff8); }
+.se-diff__pre--old,
+.se-diff__pre--new {
+  background: var(--se-color-code-bg, #f6f8fa);
+}
 
 .se-diff__hl {
   border-radius: 3px;
