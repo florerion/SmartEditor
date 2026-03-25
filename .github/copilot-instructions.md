@@ -49,6 +49,15 @@
 - Selection line numbers in editor-facing APIs are 0-based.
 - Respect undo semantics in `CodePanel.setValue(value, undoable)`; `undoable=false` must not add to history.
 - Ensure components that add listeners or timers clean them up in `destroy()`.
+- Preview code blocks are rendered with a floating `.se-code-block__toolbar` overlay (language select + copy button) that appears on hover/focus-within.
+- Keep `_renderCodeBlockToolbar()` in `Parser.js` as the single source for code block toolbar HTML; do not duplicate toolbar markup elsewhere.
+- Copy button in preview uses `navigator.clipboard.writeText()`; on success it switches to a checkmark icon (`.is-copied` class) for 1.5 s.
+- `CodePanel.replaceRange(from, to, text, opts)` applies a range change without touching cursor or selection; preserve this semantic.
+- Preview stability lock: when changing a code fence language, capture `scrollTop` before the change and restore it after the full async render cycle (KaTeX → Mermaid → images) using the pin+poll helpers:
+	- `_beginPreviewStabilityLock(scrollTop)` — freezes sync, suspends scroll callbacks, sets pin+deadline.
+	- `_schedulePreviewStabilityUnlock(initialDelayMs)` — polls every 90 ms until async work settles or 1200 ms deadline, then calls `_finalizePreviewStabilityLock()`.
+	- `_hasPendingPreviewAsyncWork()` — returns true while Mermaid renders or images are loading.
+	- Do not replace the poll loop with a fixed timer; it must wait for actual async completion.
 - Preview image deletion UX: when an image is selected in preview and user presses `Delete`/`Backspace`, remove the corresponding markdown image token (`![...](...)`, including draw.io variant) rather than deleting a single character from code.
 - Keep preview delete keyboard interception in capture phase so CodeMirror does not consume `Delete` first.
 - `ImageResize` handle uses `position: fixed`; compute handle coordinates in viewport space (do not add `window.scrollX/window.scrollY`).
@@ -83,6 +92,17 @@
 - Preserve anti-jitter dead zone (ratio-based threshold) to avoid micro-scroll corrections when target is already near desired position.
 - Preview click navigation must retain temporary highlight and avoid feedback loops (mark source as `preview` before code scroll).
 - Clean up RAF handles and the release timer in `destroy()`.
+
+## Syntax-Highlighted Code Blocks in Preview
+- `Parser.js` renders fenced code blocks using highlight.js (tree-shaken, 35 languages registered).
+- Each code line is wrapped in `<span data-source-line="N">` for code-preview sync.
+- `_renderCodeBlockToolbar(selectedLang, srcLine)` generates the floating toolbar overlay inside `.se-code-block__toolbar`.
+- Toolbar contains two controls:
+	1. `.se-code-block__lang-select` — `<select>` for changing the code fence language.
+	2. `.se-code-block__copy-btn` — icon-only `<button>` that copies code to clipboard.
+- Changing language triggers `_setCodeFenceLanguage(line0, language)` in `EditorCore` which uses `CodePanel.replaceRange()` and the preview stability lock.
+- Copy button feedback: adds `.is-copied` class + changes `title` to `"Copied!"` for 1.5 s, then resets.
+- When adding new tags to preview HTML, update DOMPurify `ADD_TAGS` in `src/ui/PreviewPanel.js`.
 
 ## draw.io Packaging
 - Keep draw.io self-hosted by default:

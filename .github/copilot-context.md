@@ -206,6 +206,48 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
   viewport-space values are used directly (no `window.scrollX/window.scrollY` offsets), so the
   handle stays anchored in the image corner.
 
+## Syntax-Highlighted Code Blocks (branch: colored-code)
+
+### highlight.js integration
+- highlight.js is imported tree-shaken in `src/core/Parser.js`; 35 languages are registered explicitly.
+- Fenced code blocks are rendered with per-line `<span data-source-line="N">` wrappers inside `<code class="hljs language-X">` so code-preview scroll sync continues to work.
+- Full hljs token CSS is defined in `src/styles/editorStyles.js` using theme-aware `--se-color-hljs-*` custom properties.
+
+### Code block toolbar overlay
+- Each rendered code block is wrapped in `<div class="se-code-block">` (relative-positioned).
+- A floating `<div class="se-code-block__toolbar">` is absolutely positioned top-right, opacity-0 by default, visible on hover/focus-within (always visible on touch via `@media (hover: none)`).
+- Toolbar contains:
+  1. `<select class="se-code-block__lang-select">` — 35 options generated from `SUPPORTED_CODE_LANGUAGE_OPTIONS`.
+  2. `<button class="se-code-block__copy-btn">` — icon-only, `title="Copy"`, 26×26 px, mask-image SVG icon.
+- HTML generation is in `Parser._renderCodeBlockToolbar(selectedLang, srcLine)`.
+
+### Language switcher
+- `EditorCore` listens to `change` on `.se-code-block__lang-select` via `_boundPreviewLanguageChange`.
+- Language change calls `_setCodeFenceLanguage(line0, language)` which uses `CodePanel.replaceRange(from, to, text)` — a range edit without cursor move.
+- `CodePanel.replaceRange()` does not modify selection; it is a pure document patch.
+
+### Copy button
+- Click handled in `PreviewPanel._handleCopyClick(btn)` before the `data-source-line` navigation logic.
+- Uses `navigator.clipboard.writeText(codeEl.textContent)`; silently ignores clipboard permission errors.
+- On success: adds `.is-copied` class (switches icon to checkmark, color to `--se-color-success`), resets after 1.5 s.
+
+### Preview stability lock (scroll-jump fix)
+- Root cause: changing a code fence language triggers a 150 ms debounced `_updatePreview()`, which swaps `innerHTML`. The new DOM has small KaTeX placeholders, shrinking the document and clamping `scrollTop`.
+- Fix: pin+poll mechanism.
+  - Before `replaceRange`: call `_beginPreviewStabilityLock(scrollTop)` — freezes `_suspendCodeToPreviewSync`, calls `PreviewPanel.suspendScrollCallbacks()`, stores `_pinPreviewScrollTop` + `_previewPinDeadline`.
+  - Inside `_updatePreview()`, after `_renderMath()`: `_applyPinnedPreviewScroll()` restores `scrollTop`.
+  - After `replaceRange`: `_schedulePreviewStabilityUnlock(220)` — waits 220 ms, then polls every 90 ms until `_hasPendingPreviewAsyncWork()` is false or 1200 ms deadline expires, then calls `_finalizePreviewStabilityLock()`.
+  - `_pendingMermaidRenders` counter tracks async Mermaid SVG renders; each `_renderMermaid()` call calls `_applyPinnedPreviewScroll()` in `finally`.
+  - `_pendingPreviewImageLoads` counter tracks unloaded `<img>` elements via `load`/`error` listeners (scoped to render cycle via `_previewRenderCycleId`).
+- Key private fields: `_pinPreviewScrollTop`, `_previewPinDeadline`, `_pendingMermaidRenders`, `_pendingPreviewImageLoads`, `_previewRenderCycleId`, `_suspendCodeToPreviewSync`.
+
+### Files involved
+- `src/core/Parser.js` — highlight.js, per-line spans, `_renderCodeBlockToolbar()`
+- `src/ui/CodePanel.js` — `replaceRange(from, to, text, opts)` method
+- `src/core/EditorCore.js` — `_setCodeFenceLanguage()`, stability lock helpers, event wiring
+- `src/ui/PreviewPanel.js` — scroll suspension API, `_handleCopyClick()`, DOMPurify `ADD_TAGS` updated
+- `src/styles/editorStyles.js` — hljs token CSS, toolbar layout, copy button with icon states
+
 ## Build And Validation
 - Install deps: `npm install`
 - Build: `npm run build`
@@ -229,5 +271,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-24
-- Reason: added Eleventy compatibility MVP (profiles, validation, table issue codes, fix panel with scroll/jump) and refined propose diff highlighting to changed spans only.
+- Date: 2026-03-25
+- Reason: added syntax-highlighted code blocks in preview (highlight.js, language switcher, copy button, scroll-jump stability lock).
