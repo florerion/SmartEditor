@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SmartEditor — Demo (Etap 3)</title>
+  <title>SmartEditor — Demo</title>
   <!-- KaTeX CSS required for math rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
   <!-- Mermaid (optional — comment out to see fallback raw code) -->
@@ -75,7 +75,7 @@
 <body>
 
   <header>
-    <h1>SmartEditor — Etap 3</h1>
+    <h1>SmartEditor</h1>
 
     <div class="controls">
       <button onclick="logMd()">getMarkdown()</button>
@@ -89,7 +89,7 @@
       <button onclick="removeTemplate()">removeTemplate()</button>
       <button onclick="toggleMode()">toggleMode()</button>
       <button onclick="toggleTheme()">toggleTheme()</button>
-      <div class="controls-hint">Hint: zaznacz fragment tekstu przed <code>replace-selection</code>; bez zaznaczenia tryb zrobi fallback do <code>insert-at-cursor</code>. <code>toggleTheme()</code> przełącza teraz wszystkie built-in presety (w tym <code>solarized</code>, <code>nord</code>, <code>high-contrast</code>).</div>
+      <div class="controls-hint">Hint: select a text fragment before <code>replace-selection</code>; with no selection this mode falls back to <code>insert-at-cursor</code>. <code>toggleTheme()</code> now cycles through all built-in presets (including <code>solarized</code>, <code>nord</code>, <code>high-contrast</code>).</div>
     </div>
   </header>
 
@@ -119,30 +119,30 @@
     const DEMO_DRAWIO_XML = '<mxfile host="app.diagrams.net"><diagram id="d1" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
     const DEMO_DRAWIO_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgNjQwIDIyMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIyMjAiIHJ4PSIxNiIgZmlsbD0iI2VlZjZmZiIvPjxyZWN0IHg9IjI0IiB5PSIyNCIgd2lkdGg9IjU5MiIgaGVpZ2h0PSIxNzIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOTNjNWZkIi8+PHRleHQgeD0iMzIwIiB5PSIxMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzFkNGVkOCI+ZHJhdy5pbyBkZW1vPC90ZXh0Pjwvc3ZnPg==';
 
-    const DEMO = `# Witaj w SmartEditor — Etap 3
+    const DEMO = `# Welcome to SmartEditor — Stage 3
 
-To jest **edytor Markdown** z podglądem na żywo.
+  This is a **Markdown editor** with live preview.
 
-## Tabela (kliknij komórkę → sync z kodem)
+  ## Table (click a cell → sync with code)
 
-| Cecha            | Status       | Etap |
-|------------------|--------------|------|
-| Split view       | ✅ gotowe    | 1    |
-| Sync linii       | ✅ gotowe    | 1    |
-| Obrazki / upload | ✅ gotowe    | 2    |
-| Resize obrazków  | ✅ gotowe    | 2    |
-| Tabele (dialog)  | ✅ gotowe    | 2    |
-| KaTeX math       | ✅ gotowe    | 2    |
-| Mermaid          | ✅ gotowe    | 2    |
-| draw.io          | ✅ gotowe   | 3    |
-| Diff modal       | ✅ gotowe   | 3    |
-| WYSIWYG beta     | ✅ gotowe   | 3    |
+  | Feature          | Status    | Stage |
+  |------------------|-----------|-------|
+  | Split view       | ✅ done   | 1     |
+  | Line sync        | ✅ done   | 1     |
+  | Images / upload  | ✅ done   | 2     |
+  | Image resize     | ✅ done   | 2     |
+  | Tables (dialog)  | ✅ done   | 2     |
+  | KaTeX math       | ✅ done   | 2     |
+  | Mermaid          | ✅ done   | 2     |
+  | draw.io          | ✅ done   | 3     |
+  | Diff modal       | ✅ done   | 3     |
+  | WYSIWYG beta     | ✅ done   | 3     |
 
-## Math inline i blokowy
+  ## Inline and block math
 
-Wzór inline: $E = mc^2$ i $\\sqrt{a^2 + b^2} = c$
+  Inline formula: $E = mc^2$ and $\\sqrt{a^2 + b^2} = c$
 
-Wzór blokowy:
+  Block formula:
 
 $$
 \\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}
@@ -152,17 +152,17 @@ $$
 
 \`\`\`mermaid
 graph TD
-    A[Markdown w repo] --> B{Commit}
+    A[Markdown in repo] --> B{Commit}
     B -->|CI/CD| C[Eleventy build]
     C --> D[GitHub Pages]
-    B -->|Editor| E[Podgląd live]
+    B -->|Editor| E[Live preview]
 \`\`\`
 
-## draw.io diagram (kliknij obraz lub Edit w preview)
+## draw.io diagram (click image or Edit in preview)
 
 ![draw.io](${DEMO_DRAWIO_IMAGE}){${encodeURIComponent(DEMO_DRAWIO_XML)}}
 
-## Blok kodu (kliknij linię → sync z kodem)
+## Code block (click a line → sync with code)
 
 \`\`\`javascript
 function createEditor(element, options) {
@@ -176,16 +176,16 @@ const editor = createEditor('#app', {
 });
 \`\`\`
 
-## Obrazki
+## Images
 
-Wklej obrazek ze schowka (Ctrl+V) albo przeciągnij plik na edytor.
-Hover na obrazek w preview → pojawi się uchwyt resize (prawy dolny róg).
+Paste an image from the clipboard (Ctrl+V) or drag a file onto the editor.
+Hover over an image in preview to show the resize handle (bottom-right corner).
 
-![Przykład|320x180](https://picsum.photos/320/180)
+![Example|320x180](https://picsum.photos/320/180)
 
 ---
 
-Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej linii.
+Click an element in **preview** and the code cursor jumps to the matching line.
 `;
 
     const templateCatalog = [
@@ -291,7 +291,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
             id: 'custom',
             order: 60,
             items: showRegisteredStar ? [
-              { action: 'star-wrap', label: 'Highlight', display: 'label' },
+              { action: 'star-wrap', display: 'icon' },
             ] : [],
           },
           {
@@ -367,7 +367,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       },
 
       onChange(markdown, tokens, html) {
-        log(`onChange — ${markdown.length} znaków`);
+        log(`onChange - ${markdown.length} chars`);
       },
 
       onSelectionChange(sel) {
@@ -375,7 +375,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       },
 
       onPreviewClick(el, range) {
-        log(`previewClick → linia ${range.from}`);
+        log(`previewClick -> line ${range.from}`);
       },
 
       onCompatibilityStatusChange(status, report) {
@@ -396,43 +396,43 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
     // ------------------------------------------------------------------ //
     window.logMd = () => {
       const md = editor.getMarkdown();
-      log(`getMarkdown() → ${md.length} znaków`);
+      log(`getMarkdown() -> ${md.length} chars`);
       console.log(md);
     };
 
     window.doSet = () => {
-      editor.setMarkdown('# Nowa treść\n\nUstawiona przez `setMarkdown()` API.\n\n- pozycja 1\n- pozycja 2');
-      log('setMarkdown() wywołane');
+      editor.setMarkdown('# New content\n\nSet via the `setMarkdown()` API.\n\n- item 1\n- item 2');
+      log('setMarkdown() called');
     };
 
     window.doInsert = () => {
-      editor.insertText('\n\n> **Wstawiony** przez `insertText()` API.\n\n');
-      log('insertText() wywołane');
+      editor.insertText('\n\n> **Inserted** via the `insertText()` API.\n\n');
+      log('insertText() called');
     };
 
     window.doProposeAll = () => {
-      editor.proposeChange('# Propozycja od chatbota\n\nTen tekst pochodzi z `proposeChange()` API.\n\nTryb: `replace-all`.\n', { mode: 'replace-all' });
+      editor.proposeChange('# Proposal from chatbot\n\nThis text comes from the `proposeChange()` API.\n\nMode: `replace-all`.\n', { mode: 'replace-all' });
       log('proposeChange() — mode=replace-all');
     };
 
     window.doProposeSelection = () => {
-      editor.proposeChange('<< ZASTAPIENIE ZAZNACZENIA >', { mode: 'replace-selection' });
-      log('proposeChange() — mode=replace-selection (bez zaznaczenia: fallback do insert-at-cursor)');
+      editor.proposeChange('<< REPLACE SELECTION >>', { mode: 'replace-selection' });
+      log('proposeChange() - mode=replace-selection (no selection: fallback to insert-at-cursor)');
     };
 
     window.doProposeCursor = () => {
-      editor.proposeChange(' [WSTAWKA W MIEJSCU KURSORA] ', { mode: 'insert-at-cursor' });
+      editor.proposeChange(' [INSERT AT CURSOR] ', { mode: 'insert-at-cursor' });
       log('proposeChange() — mode=insert-at-cursor');
     };
 
     let customRegistered = false;
     window.doRegister = () => {
-      if (customRegistered) { log('Akcja już zarejestrowana'); return; }
+      if (customRegistered) { log('Action already registered'); return; }
       customRegistered = true;
       editor.registerAction({
         id: 'star-wrap',
-        title: 'Dodaj gwiazdkę',
-        label: '⭐',
+        title: 'Add star',
+        icon: '⭐',
         group: 'custom',
         order: 200,
         run(api, state) {
@@ -448,10 +448,9 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       editor.upsertToolbarItem('custom', {
         id: 'star-wrap-item',
         action: 'star-wrap',
-        label: 'Highlight',
-        display: 'label',
+        display: 'icon',
       });
-      log('registerAction() — akcja ⭐ dodana i pokazana w toolbar');
+      log('registerAction() - ⭐ action added and shown in toolbar');
     };
 
     let extraTemplateCount = 1;
@@ -475,7 +474,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
           log(`Templates → applied ${args.templateId}`);
         },
       });
-      log(`upsertDropdownItem() — dodano ${templateId} do Templates`);
+      log(`upsertDropdownItem() - added ${templateId} to Templates`);
     };
 
     window.removeTemplate = () => {
@@ -484,7 +483,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
         .find((entry) => entry.id.startsWith('custom-'));
 
       if (!customTemplate) {
-        log('Brak custom templatek do usunięcia');
+        log('No custom templates to remove');
         return;
       }
 
@@ -492,7 +491,7 @@ Kliknij element w **podglądzie** → kursor w kodzie skacze do odpowiedniej lin
       if (idx !== -1) templateCatalog.splice(idx, 1);
 
       editor.removeDropdownItem('templates', 'templates-menu', `template-${customTemplate.id}`);
-      log(`removeDropdownItem() — usunięto ${customTemplate.id} z Templates`);
+      log(`removeDropdownItem() - removed ${customTemplate.id} from Templates`);
     };
 
     const MODES = ['split', 'code', 'preview', 'wysiwyg'];

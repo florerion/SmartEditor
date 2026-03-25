@@ -553,6 +553,31 @@ type ToolbarItem =
 
 Use helper methods when host data changes, for example after the user creates a new template.
 
+Example for integrators: add a custom action button at runtime in declarative toolbar mode,
+even if the target group is not defined in initial `toolbar.groups`.
+
+```js
+editor.registerAction({
+  id: 'star-wrap',
+  title: 'Add star',
+  icon: '⭐',
+  run(api, state) {
+    const text = state.selection?.text;
+    if (text) api.replaceSelection(`⭐ ${text} ⭐`);
+    else api.insertText(' ⭐ ');
+  },
+});
+
+editor.upsertToolbarItem('custom', {
+  id: 'star-wrap-item',
+  action: 'star-wrap',
+  display: 'icon',
+});
+```
+
+`upsertToolbarItem(groupId, ...)` auto-creates the group when it does not exist.
+If you need explicit group ordering, call `upsertToolbarGroup({ id, order, items: [] })` first.
+
 ```js
 editor.upsertDropdownItem('templates', 'templates-menu', {
   id: 'template-new',
