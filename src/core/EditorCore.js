@@ -88,9 +88,16 @@ export class EditorCore {
     this._scrollSyncSource = null;
     this._scrollSyncReleaseTimer = null;
     this._scrollSyncSuppressed = false;
+    this._suspendCodeToPreviewSync = false;
     this._scrollSyncDebounceTimer = null;
+    this._previewScrollUnlockTimer = null;
     this._codeScrollRaf = null;
     this._previewScrollRaf = null;
+    this._pinPreviewScrollTop = null;
+    this._pendingMermaidRenders = 0;
+    this._pendingPreviewImageLoads = 0;
+    this._previewRenderCycleId = 0;
+    this._previewPinDeadline = 0;
     this._selectedPreviewImageEl = null;
     this._theme = 'auto';
     this._compatibilityEnabled = opts.compatibility?.enabled === true;
@@ -319,8 +326,8 @@ export class EditorCore {
 
   /**
    * Insert or replace an item in a toolbar group.
-   *
-   * @param {string} groupId
+    *
+    * @param {string} groupId
    * @param {object|string} item
    * @param {object} [position]
    * @param {string} [position.beforeId]
@@ -674,6 +681,7 @@ export class EditorCore {
     clearTimeout(this._compatibilityDebounce);
     clearTimeout(this._scrollSyncReleaseTimer);
     clearTimeout(this._scrollSyncDebounceTimer);
+    clearTimeout(this._previewScrollUnlockTimer);
     cancelAnimationFrame(this._codeScrollRaf);
     cancelAnimationFrame(this._previewScrollRaf);
     this._codePanel.destroy();
@@ -687,6 +695,7 @@ export class EditorCore {
     this._bus.destroy();
     this._cleanupDivider?.();
     this._previewPanelEl?.removeEventListener('click', this._boundPreviewAction);
+    this._previewPanelEl?.removeEventListener('change', this._boundPreviewLanguageChange);
     document.removeEventListener('keydown', this._boundPreviewDeleteKey, true);
 
     this._root.innerHTML = '';
@@ -752,6 +761,7 @@ export class EditorCore {
       onCursorMove: (line) => {
         if (
           this._mode === 'split'
+          && !this._suspendCodeToPreviewSync
           && !this._scrollSyncSuppressed
           && this._scrollSyncSource !== 'preview'
         ) {
@@ -814,6 +824,20 @@ export class EditorCore {
       await this.openDrawioEditor({ xml, line: Number.isNaN(line) ? undefined : line });
     };
 
+    this._boundPreviewLanguageChange = (event) => {
+      const select = event.target.closest('.se-code-block__lang-select');
+      if (!select) return;
+
+      const line = parseInt(select.getAttribute('data-source-line') ?? '-1', 10);
+      const language = String(select.value || '').trim();
+      if (!Number.isFinite(line) || !language) return;
+
+      event.stopPropagation();
+      // Prevent browser focus management on native select from nudging scroll.
+      select.blur();
+      this._setCodeFenceLanguage(line, language);
+    };
+
     this._boundPreviewDeleteKey = (event) => {
       if (!this._selectedPreviewImageEl) return;
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
@@ -828,6 +852,7 @@ export class EditorCore {
     };
 
     this._previewPanelEl.addEventListener('click', this._boundPreviewAction);
+    this._previewPanelEl.addEventListener('change', this._boundPreviewLanguageChange);
     document.addEventListener('keydown', this._boundPreviewDeleteKey, true);
   }
 
@@ -907,10 +932,14 @@ export class EditorCore {
   }
 
   _updatePreview(markdown) {
+    this._previewRenderCycleId += 1;
     const { html } = this._parser.render(markdown);
     this._setSelectedPreviewImage(null);
     this._previewPanel.render(html);
     this._renderMath();
+    this._trackPendingPreviewImages(this._previewRenderCycleId);
+    // Re-apply pinned scroll after synchronous post-processing.
+    this._applyPinnedPreviewScroll();
     this._renderMermaid();
     this._imageResize?.attachHandlers();
   }
@@ -937,21 +966,100 @@ export class EditorCore {
 
   _renderMermaid() {
     const mermaid = window.mermaid;
-    if (!mermaid) return;
+    if (!mermaid) {
+      this._pendingMermaidRenders = 0;
+      return;
+    }
 
-    this._previewPanelEl
-      .querySelectorAll('.se-mermaid:not(.se-mermaid--rendered)')
-      .forEach(async (el, idx) => {
-        const code = decodeURIComponent(el.getAttribute('data-code') ?? '');
-        try {
-          const id = `se-mermaid-${Date.now()}-${idx}`;
-          const { svg } = await mermaid.render(id, code);
-          el.innerHTML = svg;
-          el.classList.add('se-mermaid--rendered');
-        } catch (e) {
-          console.warn('[EditorCore] mermaid render error:', e);
-        }
-      });
+    const targets = Array.from(this._previewPanelEl
+      .querySelectorAll('.se-mermaid:not(.se-mermaid--rendered)'));
+    this._pendingMermaidRenders = targets.length;
+    if (!targets.length) return;
+
+    targets.forEach(async (el, idx) => {
+      const code = decodeURIComponent(el.getAttribute('data-code') ?? '');
+      try {
+        const id = `se-mermaid-${Date.now()}-${idx}`;
+        const { svg } = await mermaid.render(id, code);
+        el.innerHTML = svg;
+        el.classList.add('se-mermaid--rendered');
+      } catch (e) {
+        console.warn('[EditorCore] mermaid render error:', e);
+      } finally {
+        this._pendingMermaidRenders = Math.max(0, this._pendingMermaidRenders - 1);
+        // Mermaid output can change block height asynchronously.
+        this._applyPinnedPreviewScroll();
+      }
+    });
+  }
+
+  _applyPinnedPreviewScroll() {
+    if (this._pinPreviewScrollTop === null) return;
+    this._previewPanel.getRoot().scrollTop = this._pinPreviewScrollTop;
+  }
+
+  _beginPreviewStabilityLock(scrollTop) {
+    this._suspendCodeToPreviewSync = true;
+    this._scrollSyncSuppressed = true;
+    this._previewPanel.suspendScrollCallbacks();
+    clearTimeout(this._scrollSyncDebounceTimer);
+    clearTimeout(this._previewScrollUnlockTimer);
+
+    this._pinPreviewScrollTop = scrollTop;
+    this._previewPinDeadline = Date.now() + 1200;
+  }
+
+  _hasPendingPreviewAsyncWork() {
+    return this._pendingMermaidRenders > 0 || this._pendingPreviewImageLoads > 0;
+  }
+
+  _finalizePreviewStabilityLock() {
+    this._previewPanel.resumeScrollCallbacks();
+    this._suspendCodeToPreviewSync = false;
+    this._scrollSyncSuppressed = false;
+    this._pinPreviewScrollTop = null;
+    this._pendingPreviewImageLoads = 0;
+    this._previewPinDeadline = 0;
+    this._previewScrollUnlockTimer = null;
+  }
+
+  _schedulePreviewStabilityUnlock(initialDelayMs = 220) {
+    cancelAnimationFrame(this._previewScrollRaf);
+
+    const releasePreviewLock = () => {
+      this._applyPinnedPreviewScroll();
+      const withinDeadline = Date.now() < this._previewPinDeadline;
+      if (this._hasPendingPreviewAsyncWork() && withinDeadline) {
+        this._previewScrollUnlockTimer = setTimeout(releasePreviewLock, 90);
+        return;
+      }
+      this._finalizePreviewStabilityLock();
+    };
+
+    this._previewScrollUnlockTimer = setTimeout(releasePreviewLock, initialDelayMs);
+  }
+
+  _trackPendingPreviewImages(renderCycleId) {
+    const images = Array.from(this._previewPanelEl.querySelectorAll('img'));
+    let pending = 0;
+
+    images.forEach((img) => {
+      // complete=true means load/error has already settled for this image.
+      if (img.complete) return;
+      pending += 1;
+
+      const onSettled = () => {
+        // Ignore stale events from a previous render cycle.
+        if (renderCycleId !== this._previewRenderCycleId) return;
+        this._pendingPreviewImageLoads = Math.max(0, this._pendingPreviewImageLoads - 1);
+        this._applyPinnedPreviewScroll();
+      };
+
+      img.addEventListener('load', onSettled, { once: true });
+      img.addEventListener('error', onSettled, { once: true });
+    });
+
+    this._pendingPreviewImageLoads = pending;
   }
 
   // ============================================================
@@ -1054,6 +1162,7 @@ export class EditorCore {
   }
 
   _handleCodePanelScroll(topLine) {
+    if (this._suspendCodeToPreviewSync) return;
     if (!this._isScrollSyncActive()) return;
     if (this._scrollSyncSource === 'preview') {
       // Echo from a preview-driven smooth scroll — keep the lock alive.
@@ -1261,6 +1370,37 @@ export class EditorCore {
     return true;
   }
 
+  _setCodeFenceLanguage(line0, language) {
+    if (!Number.isFinite(line0) || line0 < 0) return false;
+
+    const markdown = this.getMarkdown();
+    const lines = markdown.split('\n');
+    if (!lines.length || line0 >= lines.length) return false;
+
+    const sourceLine = lines[line0];
+    const fenceMatch = sourceLine.match(/^(\s*)(`{3,}|~{3,})([ \t]*)(.*)$/);
+    if (!fenceMatch) return false;
+
+    const nextInfo = _replaceFenceLanguage(fenceMatch[4], language);
+    const nextLine = `${fenceMatch[1]}${fenceMatch[2]}${fenceMatch[3]}${nextInfo}`;
+    if (nextLine === sourceLine) return true;
+
+    const lineStart = this._getCharacterOffsetForLine(lines, line0);
+    const lineEnd = lineStart + sourceLine.length;
+    const previewRoot = this._previewPanel.getRoot();
+    const previewScrollTop = previewRoot.scrollTop;
+
+    this._beginPreviewStabilityLock(previewScrollTop);
+    try {
+      // Update only the opening fence line without moving editor selection/cursor.
+      this._codePanel.replaceRange(lineStart, lineEnd, nextLine);
+      previewRoot.scrollTop = previewScrollTop;
+    } finally {
+      this._schedulePreviewStabilityUnlock(220);
+    }
+    return true;
+  }
+
   _findImageTokenRangeInBlock(markdown, lines, startLine, endLine, imageEl) {
     if (!Number.isInteger(startLine) || !Number.isInteger(endLine)) return null;
     if (startLine < 0 || endLine < startLine) return null;
@@ -1379,6 +1519,27 @@ function _resolveInsertIndex(items, beforeId, afterId) {
 
 function _escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _replaceFenceLanguage(infoString, language) {
+  const lang = String(language || '').trim();
+  if (!lang) return String(infoString || '').trim();
+
+  const info = String(infoString || '').trim();
+  if (!info) return lang;
+
+  const firstSpace = info.search(/\s/);
+  if (firstSpace === -1) {
+    return info.startsWith('{') ? `${lang} ${info}` : lang;
+  }
+
+  const firstToken = info.slice(0, firstSpace);
+  const tail = info.slice(firstSpace + 1).trim();
+  if (firstToken.startsWith('{')) {
+    return `${lang} ${info}`;
+  }
+
+  return tail ? `${lang} ${tail}` : lang;
 }
 
 function _defaultDrawioImage() {

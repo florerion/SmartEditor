@@ -7,6 +7,7 @@ This document is for developers integrating the editor into their own applicatio
 ## Contents
 
 - Getting Started
+- Supported Code Block Languages
 - Embedding the Editor on a Page
 - Configuration Options
 - Runtime API
@@ -29,6 +30,7 @@ This document is for developers integrating the editor into their own applicatio
 - Optional globals for enhanced preview:
   - `window.mermaid` for Mermaid rendering.
   - KaTeX CSS for math rendering visuals.
+- Fenced code blocks with an explicit language, for example `javascript`, are syntax-highlighted in preview.
 
 ### Install dependencies (project development)
 
@@ -47,6 +49,59 @@ Build output is written to `dist/`:
 - `dist/smart-editor.esm.js`
 - `dist/smart-editor.cjs.js`
 - `dist/smart-editor.iife.js`
+
+## Supported Code Block Languages
+
+Syntax highlighting in preview is enabled for fenced code blocks with explicit language names, for example:
+
+````markdown
+```javascript
+console.log('hello');
+```
+````
+
+Supported language labels:
+
+- `bash`
+- `c`
+- `cpp`
+- `diff`
+- `django`
+- `dockerfile`
+- `excel`
+- `graphql`
+- `handlebars`
+- `http`
+- `java`
+- `javascript`
+- `json`
+- `kotlin`
+- `lisp`
+- `lua`
+- `makefile`
+- `markdown`
+- `mathematica`
+- `matlab`
+- `nginx`
+- `objectivec`
+- `perl`
+- `php`
+- `plaintext`
+- `powershell`
+- `python`
+- `ruby`
+- `sql`
+- `scala`
+- `shell`
+- `swift`
+- `typescript`
+- `xml`
+
+Common aliases are accepted (for example `js`, `ts`, `html`, `sh`, `ps1`, `gql`, `md`, `objc`).
+
+Special fallback:
+
+- `curl` is mapped to `bash` highlighting.
 
 ## Embedding the Editor on a Page
 

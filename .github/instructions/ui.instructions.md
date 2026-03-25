@@ -36,3 +36,11 @@ applyTo: "src/ui/**"
 	- classes/selectors use `se-*`,
 	- style variables use `--se-*`,
 	- do not introduce new `mde-*` class/variable names.
+- Preserve code block toolbar structure in preview:
+	- `.se-code-block` wraps the overlay + `<pre>`; positioning is `relative`.
+	- `.se-code-block__toolbar` is `absolute` top-right, hidden by default, shown on hover/focus-within.
+	- `.se-code-block__lang-select` and `.se-code-block__copy-btn` are siblings inside the toolbar.
+	- Do not add new toolbar controls without also updating `Parser._renderCodeBlockToolbar()`.
+- Copy button (`.se-code-block__copy-btn`) uses mask-image SVG icons driven by `currentColor`; `.is-copied` state switches the icon to a checkmark and color to `--se-color-success`.
+- `PreviewPanel._handleClick()` must check `.se-code-block__copy-btn` first (before `data-source-line` navigation) and return early after handling copy.
+- Scroll suspension counter (`_scrollCallbacksSuspended`) in `PreviewPanel` is reference-counted; always call `resumeScrollCallbacks()` to match each `suspendScrollCallbacks()`.

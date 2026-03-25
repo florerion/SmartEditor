@@ -36,3 +36,9 @@ applyTo: "src/core/**"
 	- CSS/UI classes use `se-*`,
 	- custom properties use `--se-*`,
 	- avoid reintroducing legacy `mde-*` naming.
+- Preserve preview stability lock semantics in `EditorCore` for code fence language changes:
+	- `_beginPreviewStabilityLock(scrollTop)` freezes sync + scroll callbacks, sets pin and deadline.
+	- `_schedulePreviewStabilityUnlock(ms)` polls `_hasPendingPreviewAsyncWork()` every 90 ms (1200 ms max) before calling `_finalizePreviewStabilityLock()`.
+	- `_applyPinnedPreviewScroll()` is called after `_renderMath()` in `_updatePreview()` and in each Mermaid `finally` block.
+	- Do not replace the polling loop with a fixed timeout; the loop must wait for actual Mermaid/image completion.
+- `CodePanel.replaceRange(from, to, text, opts)` is a pure document patch without cursor/selection move; preserve this semantic when using it for source edits triggered from preview UI.

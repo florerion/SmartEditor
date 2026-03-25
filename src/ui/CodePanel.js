@@ -243,6 +243,24 @@ export class CodePanel {
   }
 
   /**
+   * Replace a document range without forcing cursor movement.
+   * Useful for programmatic edits that should not re-center the viewport.
+   * @param {number} from
+   * @param {number} to
+   * @param {string} text
+   * @param {object} [opts]
+   * @param {boolean} [opts.focus=false]
+   */
+  replaceRange(from, to, text, opts = {}) {
+    this._view.dispatch({
+      changes: { from, to, insert: text },
+    });
+    if (opts.focus === true) {
+      this._view.focus();
+    }
+  }
+
+  /**
    * Scroll to and select a 0-based line.
    * @param {number} line
    */
