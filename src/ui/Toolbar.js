@@ -20,6 +20,7 @@ export class Toolbar {
     this._openDropdownId = null;
     this._closeDropdownTimer = null;
     this._dropdownCloseDelay = 160;
+    this._disabled = false;
 
     this._boundDocumentPointerDown = this._handleDocumentPointerDown.bind(this);
     this._boundDocumentKeydown = this._handleDocumentKeydown.bind(this);
@@ -102,7 +103,9 @@ export class Toolbar {
     const state = this._buildState();
 
     this._renderedEntries.forEach((entry) => {
-      const enabled = entry.definition.isEnabled ? entry.definition.isEnabled(state) : true;
+      const enabled = this._disabled
+        ? false
+        : (entry.definition.isEnabled ? entry.definition.isEnabled(state) : true);
       const active = entry.definition.isActive ? entry.definition.isActive(state) : false;
 
       entry.element.disabled = !enabled;
@@ -124,9 +127,21 @@ export class Toolbar {
       const interactiveChildren = dropdown.entries.filter((entry) => !entry.element.hidden);
       const anyEnabled = interactiveChildren.some((entry) => entry.enabled !== false);
 
-      dropdown.trigger.disabled = !anyEnabled;
+      dropdown.trigger.disabled = this._disabled || !anyEnabled;
       dropdown.trigger.setAttribute('aria-expanded', String(this._openDropdownId === dropdown.id));
     });
+  }
+
+  /**
+   * Enable or disable all toolbar interactions.
+   * @param {boolean} disabled
+   */
+  setDisabled(disabled) {
+    const nextDisabled = disabled === true;
+    if (nextDisabled === this._disabled) return;
+    this._disabled = nextDisabled;
+    if (nextDisabled) this._closeDropdown();
+    this.updateState();
   }
 
   destroy() {
@@ -516,6 +531,8 @@ export class Toolbar {
   }
 
   async _executeEntry(definition, args) {
+    if (this._disabled) return;
+
     const api = this._getAPI();
     const state = this._buildState();
     if (definition.isEnabled && !definition.isEnabled(state)) return;

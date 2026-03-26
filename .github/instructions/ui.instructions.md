@@ -44,3 +44,7 @@ applyTo: "src/ui/**"
 - Copy button (`.se-code-block__copy-btn`) uses mask-image SVG icons driven by `currentColor`; `.is-copied` state switches the icon to a checkmark and color to `--se-color-success`.
 - `PreviewPanel._handleClick()` must check `.se-code-block__copy-btn` first (before `data-source-line` navigation) and return early after handling copy.
 - Scroll suspension counter (`_scrollCallbacksSuspended`) in `PreviewPanel` is reference-counted; always call `resumeScrollCallbacks()` to match each `suspendScrollCallbacks()`.
+- Preserve loading overlay UX in `LoadingOverlay`:
+	- keep semi-transparent modal-like backdrop so editor context remains visible,
+	- keep anti-flicker timing (`showDelayMs`, `minVisibleMs`) and do not regress to immediate flash show/hide,
+	- keep configurable text labels (`defaultLabel`, `cancel`) and cancel-button wiring (`data-se-busy-cancel`).

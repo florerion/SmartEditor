@@ -66,6 +66,10 @@
 	- `replace-selection` falls back to `insert-at-cursor` when selection is empty,
 	- cursor insert uses `selection.to` (end of selection/cursor).
 - Diff modal for `proposeChange` should compare full document snapshots and highlight only true changed ranges (old/new), with cursor marker for insert mode and neutral non-changed column background.
+- Busy/loading UX is centralized in `EditorCore` + `LoadingOverlay`:
+	- Prefer `runWithBusy(...)` for async UI operations so lock/spinner/cancel stay consistent.
+	- Preserve busy API surface (`isBusy`, `getBusyState`, `begin/update/end/cancelBusyTask`, `runWithBusy`) and web-component event `se-busy-change`.
+	- Keep busy overlay anti-flicker behavior (`busy.showDelay`, `busy.minVisible`) and configurable labels (`busy.texts.defaultLabel`, `busy.texts.cancel`).
 
 ## Compatibility MVP
 - Default compatibility profile is Eleventy-like (`createEleventyCompatibilityProfile`) and supports markdown-it options, disabled rules, and plugin injection.
