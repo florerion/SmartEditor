@@ -162,12 +162,16 @@ Importing the library registers the custom element as a side effect.
 | `theme` | `'auto' \| 'light' \| 'dark' \| 'sepia' \| 'midnight' \| 'solarized' \| 'nord' \| 'high-contrast'` | `'auto'` | Theme id applied to the editor root. `auto` follows the OS color scheme; the built-in presets can also be switched at runtime. |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
-| `upload.endpoint` | `string` | `undefined` | Image upload endpoint (`POST multipart/form-data`). Falls back to base64 if omitted or on error. |
+| `upload.endpoint` | `string` | `undefined` | Default upload endpoint (`POST multipart/form-data`) used for all file types with no matching entry in `upload.endpoints`. Images fall back to base64 when omitted or on error; non-image files require an endpoint and are rejected without one. |
+| `upload.endpoints` | `Object.<string,string>` | `undefined` | Per-type endpoint overrides. Keys can be a MIME type (`image/png`), a wildcard (`image/*`), or a file extension (`.pdf`). The first matching entry wins; unmatched files fall back to `upload.endpoint`. Example: `{ 'image/*': '/upload/image', 'application/pdf': '/upload/raw' }` |
 | `upload.headers` | `object` | `{}` | Extra HTTP headers for upload requests (e.g. `Authorization`). |
 | `upload.extraFields` | `object` | `{}` | Extra FormData fields appended to every upload (e.g. `{ upload_preset: 'my_preset' }` for Cloudinary unsigned upload). |
 | `upload.responseUrlField` | `string` | `'url'` | JSON field in the upload response that holds the asset URL (e.g. `'secure_url'` for Cloudinary). |
 | `upload.maxSize` | `number` | `5 * 1024 * 1024` | Max image size in bytes. |
+| `upload.fileMaxSize` | `number` | `upload.maxSize` | Max non-image file size in bytes. |
 | `upload.formats` | `string[]` | common image MIME list | Allowed image MIME types. |
+| `upload.fileFormats` | `string[]` | `undefined` | Allowed non-image MIME types/extensions (for example `application/pdf`, `.docx`). If omitted, non-image files are accepted. |
+| `upload.pickerAccept` | `string` | `*/*` | Value for file-picker `accept` attribute. |
 | `drawio.url` | `string` | `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. |
 | `toolbar` | `object` | `undefined` | Declarative toolbar layout: visible items, grouping, ordering, display mode, and dropdown menus. |
 | `busy.showDelay` | `number` | `140` | Delay (ms) before showing loading overlay (anti-flicker for very fast tasks). |
@@ -256,6 +260,14 @@ const editor = createEditor('#editor', {
     headers: { Authorization: `Bearer ${token}` },
     maxSize: 8 * 1024 * 1024,
     formats: ['image/png', 'image/jpeg', 'image/webp'],
+    fileFormats: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ],
+    pickerAccept: 'image/*,.pdf,.doc,.docx,.xls,.xlsx',
 
     // Option B: Cloudinary unsigned direct upload (no backend needed)
     // endpoint: 'https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload',
@@ -460,7 +472,8 @@ const editor = createEditor('#editor', {
     console.log('Uploading:', file.name);
   },
   onUploadDone(file, value) {
-    // value is URL (upload success) or base64 fallback
+    // value is URL (upload success) or base64 fallback.
+    // Images become ![](...), other files become [file.name](...).
   },
   onUploadError(file, error) {
     console.warn(error.message);
@@ -524,7 +537,7 @@ The editor auto-registers built-in toolbar actions grouped by intent.
 
 - `link`
 - `image` (URL prompt)
-- `image-upload` (file picker + paste/drop support)
+- `asset-upload` (asset picker + paste/drop support; images -> markdown image, files -> markdown link)
 - `table` (dialog)
 - `mermaid`
 - `drawio`
@@ -867,9 +880,23 @@ Ensure Mermaid script is loaded and initialized on the page (`window.mermaid`).
 
 Ensure KaTeX CSS is loaded. (KaTeX rendering is run by core, CSS controls visual output.)
 
-### Images do not upload
+### Assets do not upload
 
-If `upload.endpoint` is missing or fails, the editor falls back to base64 insertion. Configure endpoint + auth headers for URL-based image links.
+For **images**, if `upload.endpoint` is missing or the upload request fails, the editor falls back to embedding the image as a base64 data URI (`![](data:image/...;base64,...)`), so the document remains self-contained.
+
+For **non-image files** (PDF, Word, Excel, etc.), there is no base64 fallback — a data-URI makes no sense as a markdown link and would bloat the document. If no endpoint resolves for a non-image file, `onUploadError` is fired and nothing is inserted.
+
+If your storage service uses **different endpoints per resource type** (e.g. Cloudinary's `/image/upload` vs `/raw/upload`), use `upload.endpoints`:
+
+```js
+upload: {
+  endpoint: 'https://api.cloudinary.com/v1_1/demo/raw/upload',   // default for everything
+  endpoints: {
+    'image/*': 'https://api.cloudinary.com/v1_1/demo/image/upload', // images go here instead
+  },
+  extraFields: { upload_preset: 'my_preset' },
+}
+```
 
 ### React usage
 

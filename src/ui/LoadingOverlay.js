@@ -27,6 +27,7 @@ export class LoadingOverlay {
     this._pendingPayload = null;
     this._showTimer = null;
     this._hideTimer = null;
+    this._errorTimer = null;
 
     this._container.classList.add('se-loading-overlay');
     this._container.setAttribute('aria-hidden', 'true');
@@ -70,6 +71,11 @@ export class LoadingOverlay {
       this._hideLater();
       return;
     }
+
+    // A new busy task dismisses any pending error flash.
+    clearTimeout(this._errorTimer);
+    this._errorTimer = null;
+    this._container.classList.remove('se-loading-overlay--flash');
 
     clearTimeout(this._hideTimer);
     this._hideTimer = null;
@@ -146,11 +152,65 @@ export class LoadingOverlay {
     `;
   }
 
+  /**
+   * Flash a transient error message above the editor.
+   * Safe to call at any time; cancels any pending overlay hide and replaces
+   * the current card until dismissed or until `durationMs` elapses.
+   *
+   * @param {string} message
+   * @param {number} [durationMs=10000]
+   */
+  showError(message, durationMs = 10000) {
+    // Cancel a pending hide so the error renders without a blink gap.
+    clearTimeout(this._hideTimer);
+    this._hideTimer = null;
+    clearTimeout(this._errorTimer);
+    this._errorTimer = null;
+
+    this._container.classList.add('se-loading-overlay--flash');
+    this._container.setAttribute('aria-hidden', 'false');
+    this._paintError(String(message));
+
+    this._errorTimer = setTimeout(() => this._clearError(), Math.max(500, durationMs));
+  }
+
+  _paintError(message) {
+    this._container.innerHTML = `
+      <div class="se-loading-overlay__card se-loading-overlay__card--error" role="alert" aria-live="assertive" aria-atomic="true">
+        <svg class="se-loading-overlay__error-icon" width="34" height="34" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M15 9l-6 6M9 9l6 6"/>
+        </svg>
+        <p class="se-loading-overlay__label">${_escapeHtml(message)}</p>
+        <div class="se-loading-overlay__actions">
+          <button type="button" class="se-loading-overlay__dismiss" data-se-error-dismiss>
+            Dismiss
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  _clearError() {
+    clearTimeout(this._errorTimer);
+    this._errorTimer = null;
+    this._container.classList.remove('se-loading-overlay--flash');
+    if (!this._busy) {
+      this._visible = false;
+      this._container.innerHTML = '';
+      this._container.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   destroy() {
     clearTimeout(this._showTimer);
     clearTimeout(this._hideTimer);
+    clearTimeout(this._errorTimer);
     this._showTimer = null;
     this._hideTimer = null;
+    this._errorTimer = null;
     this._pendingPayload = null;
     this._container.removeEventListener('click', this._boundClick);
     this._container.innerHTML = '';
@@ -158,6 +218,11 @@ export class LoadingOverlay {
   }
 
   _handleClick(event) {
+    if (event.target.closest('[data-se-error-dismiss]')) {
+      this._clearError();
+      return;
+    }
+
     const btn = event.target.closest('[data-se-busy-cancel]');
     if (!btn || !this._busy) return;
 

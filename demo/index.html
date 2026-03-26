@@ -178,7 +178,7 @@ const editor = createEditor('#app', {
 
 ## Images
 
-Paste an image from the clipboard (Ctrl+V) or drag a file onto the editor.
+Paste a file from the clipboard (Ctrl+V) or drag a file onto the editor.
 Hover over an image in preview to show the resize handle (bottom-right corner).
 
 ![Example|320x180](https://picsum.photos/320/180)
@@ -258,7 +258,7 @@ Click an element in **preview** and the code cursor jumps to the matching line.
             items: [
               { action: 'link', display: 'icon' },
               { action: 'image', display: 'icon' },
-              { action: 'image-upload', label: 'Upload', display: 'icon-label' },
+              { action: 'asset-upload', label: 'Upload', display: 'icon-label' },
               { action: 'table', display: 'icon' },
               { action: 'mermaid', display: 'icon' },
               { action: 'drawio', label: 'Diagram', display: 'label' },
@@ -406,8 +406,11 @@ Click an element in **preview** and the code cursor jumps to the matching line.
       // 3. Remove the `upload` block entirely to fall back to base64.
       // ------------------------------------------------------------------
       upload: {
-        endpoint: 'https://api.cloudinary.com/v1_1/doz92xadt/image/upload', // TODO: replace YOUR_CLOUD_NAME
-        extraFields: { upload_preset: 'SmartEditorDemo' },                     // TODO: replace YOUR_UPLOAD_PRESET
+        endpoint: 'https://api.cloudinary.com/v1_1/doz92xadt/raw/upload', 
+        endpoints: {
+          'image/*': 'https://api.cloudinary.com/v1_1/doz92xadt/image/upload', // images
+        },
+        extraFields: { upload_preset: 'SmartEditorDemo' },                
         responseUrlField: 'secure_url',
         maxSize: 10 * 1024 * 1024, // 10 MB (Cloudinary free plan limit)
       },

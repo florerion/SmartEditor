@@ -149,6 +149,35 @@ export const EDITOR_STYLES = `
   background: color-mix(in srgb, var(--se-color-accent, #3b82f6) 10%, var(--se-color-surface, #ffffff));
 }
 
+/* Error flash state — visible without aria-busy on the editor */
+.se-loading-overlay--flash {
+  display: flex;
+}
+
+.se-loading-overlay__card--error {
+  border-color: var(--se-color-danger-outline, rgba(220, 38, 38, 0.42));
+  background: var(--se-color-danger-soft, #fff7f7);
+}
+
+.se-loading-overlay__error-icon {
+  color: var(--se-color-compat-invalid-text, #991b1b);
+}
+
+.se-loading-overlay__dismiss {
+  border: 1px solid var(--se-color-danger-outline, rgba(220, 38, 38, 0.42));
+  background: var(--se-color-surface, #ffffff);
+  color: var(--se-color-text, #1a1a1a);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.se-loading-overlay__dismiss:hover {
+  background: var(--se-color-danger-soft, #fff7f7);
+}
+
 @keyframes se-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
