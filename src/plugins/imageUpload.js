@@ -12,7 +12,15 @@ export class ImageUploadHandler {
   /**
    * @param {HTMLElement}  editorEl   Root element of the editor (for paste/drop listeners)
    * @param {() => object} getAPI     Lazy accessor returning the EditorCore public API
-   * @param {object}       uploadOpts Options from `new EditorCore(el, { upload: {...} })`
+   * @param {object}       [uploadOpts]                Options from `new EditorCore(el, { upload: {...} })`
+   * @param {string}       [uploadOpts.endpoint]       POST endpoint URL. If omitted, falls back to base64.
+   * @param {object}       [uploadOpts.headers]        Extra HTTP headers sent with the upload request.
+   * @param {object}       [uploadOpts.extraFields]    Extra FormData fields appended to every upload
+   *                                                   (e.g. `{ upload_preset: 'my_preset' }` for Cloudinary).
+   * @param {string}       [uploadOpts.responseUrlField='url']  Response JSON field that holds the asset URL
+   *                                                   (e.g. `'secure_url'` for Cloudinary).
+   * @param {string[]}     [uploadOpts.formats]        Allowed MIME types.
+   * @param {number}       [uploadOpts.maxSize]        Max file size in bytes (default 5 MB).
    * @param {object}       callbacks  { onUploadStart, onUploadDone, onUploadError }
    */
   constructor(editorEl, getAPI, uploadOpts, callbacks) {
@@ -111,14 +119,18 @@ export class ImageUploadHandler {
   async _upload(file, signal) {
     const body = new FormData();
     body.append('file', file);
+    for (const [key, val] of Object.entries(this._opts.extraFields ?? {})) {
+      body.append(key, String(val));
+    }
     const headers = { ...this._opts.headers };
 
     const resp = await fetch(this._opts.endpoint, { method: 'POST', body, headers, signal });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
 
     const data = await resp.json();
-    if (typeof data?.url !== 'string') throw new Error('Upload response missing "url" field');
-    return data.url;
+    const urlField = this._opts.responseUrlField ?? 'url';
+    if (typeof data?.[urlField] !== 'string') throw new Error(`Upload response missing "${urlField}" field`);
+    return data[urlField];
   }
 
   _toBase64(file, signal) {
