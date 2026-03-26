@@ -7,8 +7,8 @@ import { drawioAction } from './drawio.js';
 
 /**
  * Register all built-in toolbar actions on a Toolbar instance.
- * Note: imageUploadAction is registered separately by EditorCore after the
- * ImageUploadHandler is instantiated.
+ * Note: asset upload action is registered separately by EditorCore after the
+ * AssetUploadHandler is instantiated.
  * @param {import('../ui/Toolbar').Toolbar} toolbar
  */
 export function registerDefaultActions(toolbar) {

@@ -16,7 +16,7 @@ import { createEleventyCompatibilityProfile } from './compat/CompatibilityProfil
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
 import { registerDefaultActions } from '../plugins/index.js';
-import { ImageUploadHandler, createImageUploadAction } from '../plugins/imageUpload.js';
+import { AssetUploadHandler, createAssetUploadAction } from '../plugins/assetUpload.js';
 
 const STYLE_TAG_ID = 'se-global-styles';
 
@@ -40,12 +40,18 @@ export class EditorCore {
    * @param {object}      [opts.markdown.options]   Passed to markdown-it constructor
    * @param {Array}       [opts.markdown.plugins]   [[fn, opts?], ...]
    * @param {object}      [opts.upload]
-   * @param {string}      [opts.upload.endpoint]    POST endpoint returning { url }
+  * @param {string}      [opts.upload.endpoint]    Default POST endpoint (all file types) returning { url }
+  * @param {Object.<string,string>} [opts.upload.endpoints]  Per-type endpoint overrides; keys are MIME types,
+  *                                                wildcards (`image/*`) or extensions (`.pdf`). First match wins.
+  *                                                Example: `{ 'image/*': '/img/upload', '.pdf': '/doc/upload' }`
    * @param {object}      [opts.upload.headers]     e.g. { Authorization: 'Bearer ...' }
-   * @param {number}      [opts.upload.maxSize]     bytes, default 5 MB
-   * @param {string[]}    [opts.upload.formats]     MIME types, default common images
+   * @param {number}      [opts.upload.maxSize]     max image size in bytes, default 5 MB
+   * @param {number}      [opts.upload.fileMaxSize] max non-image size in bytes, default equals maxSize
+   * @param {string[]}    [opts.upload.formats]     allowed image MIME types, default common images
+   * @param {string[]}    [opts.upload.fileFormats] allowed non-image MIME types/extensions (e.g. '.pdf')
+   * @param {string}      [opts.upload.pickerAccept] file picker `accept` value (default allows any file)
    * @param {object}      [opts.drawio]
-  * @param {string}      [opts.drawio.url]         Embed URL. Defaults to `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`
+   * @param {string}      [opts.drawio.url]         Embed URL. Defaults to `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`
    *                                                (the self-hosted copy bundled in dist/drawio/).
   *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
    *                                                to use the public hosted version instead.
@@ -145,7 +151,7 @@ export class EditorCore {
     this._buildToolbar();
     this._buildCompatibilityPanel();
     this._buildLoadingOverlay();
-    this._buildImageHandler();
+    this._buildAssetHandler();
 
     registerDefaultActions(this._toolbar);
     this.setToolbarConfig(opts.toolbar ?? null);
@@ -291,6 +297,17 @@ export class EditorCore {
     });
     this._busyTasks.clear();
     this._recomputeBusyState();
+  }
+
+  /**
+   * Flash a transient error message in the loading overlay.
+   * Safe to call at any time — the overlay dismisses itself after `durationMs`.
+   *
+   * @param {string} message   Human-readable error text.
+   * @param {number} [durationMs=4000]
+   */
+  flashError(message, durationMs = 4000) {
+    this._loadingOverlay?.showError(String(message), durationMs);
   }
 
   /**
@@ -822,7 +839,7 @@ export class EditorCore {
     this._toolbar?.destroy();
     this._compatibilityPanel?.destroy();
     this._loadingOverlay?.destroy();
-    this._imageHandler?.destroy();
+    this._assetHandler?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
     this._drawioModal.destroy();
@@ -1000,21 +1017,21 @@ export class EditorCore {
     );
   }
 
-  _buildImageHandler() {
+  _buildAssetHandler() {
     const uploadCallbacks = {
       onUploadStart: this._opts.onUploadStart,
       onUploadDone: this._opts.onUploadDone,
       onUploadError: this._opts.onUploadError,
     };
 
-    this._imageHandler = new ImageUploadHandler(
+    this._assetHandler = new AssetUploadHandler(
       this._root,
       () => this._buildPublicAPI(),
       this._opts.upload ?? {},
       uploadCallbacks,
     );
 
-    this._toolbar.registerAction(createImageUploadAction(this._imageHandler));
+    this._toolbar.registerAction(createAssetUploadAction(this._assetHandler));
   }
 
   _buildCompatibilityPanel() {
@@ -1478,6 +1495,7 @@ export class EditorCore {
       endBusyTask: (token) => this.endBusyTask(token),
       cancelBusyTask: (token) => this.cancelBusyTask(token),
       runWithBusy: (task, opts) => this.runWithBusy(task, opts),
+      flashError: (message, durationMs) => this.flashError(message, durationMs),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       getCompatibilityReport: () => this.getCompatibilityReport(),
       getCompatibilityStatus: () => this.getCompatibilityStatus(),
