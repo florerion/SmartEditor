@@ -399,6 +399,19 @@ Click an element in **preview** and the code cursor jumps to the matching line.
         showPanel: true,
         profile: compatibilityProfile,
       },
+      // ---- Cloudinary unsigned upload ----------------------------------
+      // 1. In Cloudinary dashboard: Settings → Upload → Add upload preset
+      //    Set signing mode to "Unsigned", note the preset name.
+      // 2. Fill in your Cloud Name and upload preset name below.
+      // 3. Remove the `upload` block entirely to fall back to base64.
+      // ------------------------------------------------------------------
+      upload: {
+        endpoint: 'https://api.cloudinary.com/v1_1/doz92xadt/image/upload', // TODO: replace YOUR_CLOUD_NAME
+        extraFields: { upload_preset: 'SmartEditorDemo' },                     // TODO: replace YOUR_UPLOAD_PRESET
+        responseUrlField: 'secure_url',
+        maxSize: 10 * 1024 * 1024, // 10 MB (Cloudinary free plan limit)
+      },
+
       drawio: {
         // Local demo is served from /demo, while bundled draw.io lives in /dist/drawio.
         // Directory URL keeps draw.io relative assets under /dist/drawio/.

@@ -12,5 +12,6 @@ applyTo: "src/plugins/**"
 - For async actions (fetch/upload), handle failures gracefully and avoid partial document corruption.
 - For async actions (fetch/upload), prefer wrapping work in `api.runWithBusy(...)` so lock/spinner/cancel behavior stays consistent with editor core.
 - When async actions are cancellable, honor `AbortSignal` from `runWithBusy` context and handle `AbortError` as a non-fatal user cancel path.
+- `ImageUploadHandler` upload options: `endpoint` (POST URL), `headers`, `extraFields` (extra FormData entries appended to every request — use this for e.g. Cloudinary `upload_preset`), `responseUrlField` (JSON key holding the returned URL, defaults to `'url'`; Cloudinary uses `'secure_url'`).
 - Preserve markdown-first output compatibility with `markdown-it` and Eleventy pipeline assumptions.
 - Keep plugin files focused; avoid mixing unrelated action groups in one module.

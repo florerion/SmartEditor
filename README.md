@@ -162,8 +162,10 @@ Importing the library registers the custom element as a side effect.
 | `theme` | `'auto' \| 'light' \| 'dark' \| 'sepia' \| 'midnight' \| 'solarized' \| 'nord' \| 'high-contrast'` | `'auto'` | Theme id applied to the editor root. `auto` follows the OS color scheme; the built-in presets can also be switched at runtime. |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
-| `upload.endpoint` | `string` | `undefined` | Image upload endpoint (`POST`, expects `{ url }`). |
-| `upload.headers` | `object` | `{}` | Headers for upload requests (e.g. auth). |
+| `upload.endpoint` | `string` | `undefined` | Image upload endpoint (`POST multipart/form-data`). Falls back to base64 if omitted or on error. |
+| `upload.headers` | `object` | `{}` | Extra HTTP headers for upload requests (e.g. `Authorization`). |
+| `upload.extraFields` | `object` | `{}` | Extra FormData fields appended to every upload (e.g. `{ upload_preset: 'my_preset' }` for Cloudinary unsigned upload). |
+| `upload.responseUrlField` | `string` | `'url'` | JSON field in the upload response that holds the asset URL (e.g. `'secure_url'` for Cloudinary). |
 | `upload.maxSize` | `number` | `5 * 1024 * 1024` | Max image size in bytes. |
 | `upload.formats` | `string[]` | common image MIME list | Allowed image MIME types. |
 | `drawio.url` | `string` | `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. |
@@ -249,10 +251,17 @@ const editor = createEditor('#editor', {
     },
   },
   upload: {
+    // Option A: custom backend
     endpoint: '/api/upload',
     headers: { Authorization: `Bearer ${token}` },
     maxSize: 8 * 1024 * 1024,
     formats: ['image/png', 'image/jpeg', 'image/webp'],
+
+    // Option B: Cloudinary unsigned direct upload (no backend needed)
+    // endpoint: 'https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload',
+    // extraFields: { upload_preset: 'YOUR_UPLOAD_PRESET' },
+    // responseUrlField: 'secure_url',
+    // maxSize: 10 * 1024 * 1024,
   },
   markdown: {
     options: { html: true, linkify: true, typographer: true },
