@@ -15,6 +15,7 @@ import { EditorCore } from '../core/EditorCore.js';
  *   se-compatibility-report        CustomEvent({ detail: report })
  *   se-compatibility-status-change CustomEvent({ detail: { status, report } })
  *   se-compatibility-fix-applied   CustomEvent({ detail: payload })
+ *   se-busy-change                 CustomEvent({ detail: busyState })
  *
  * All EditorCore public methods are proxied directly on the element.
  *
@@ -86,6 +87,13 @@ export class SmartEditorElement extends HTMLElement {
           detail: payload,
         }));
       },
+
+      onBusyChange: (busyState) => {
+        this.dispatchEvent(new CustomEvent('se-busy-change', {
+          bubbles: true, composed: true,
+          detail: busyState,
+        }));
+      },
     });
   }
 
@@ -131,6 +139,13 @@ export class SmartEditorElement extends HTMLElement {
   setTheme(theme)           { return this._editor?.setTheme(theme); }
   getTheme()                { return this._editor?.getTheme(); }
   getAvailableThemes()      { return this._editor?.getAvailableThemes(); }
+  isBusy()                  { return this._editor?.isBusy(); }
+  getBusyState()            { return this._editor?.getBusyState(); }
+  beginBusyTask(opts)       { return this._editor?.beginBusyTask(opts); }
+  updateBusyTask(token, patch) { return this._editor?.updateBusyTask(token, patch); }
+  endBusyTask(token)        { return this._editor?.endBusyTask(token); }
+  cancelBusyTask(token)     { return this._editor?.cancelBusyTask(token); }
+  runWithBusy(task, opts)   { return this._editor?.runWithBusy(task, opts); }
   destroy()                 { this._editor?.destroy(); this._editor = null; }
 }
 

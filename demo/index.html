@@ -279,9 +279,26 @@ Click an element in **preview** and the code cursor jumps to the matching line.
                   args: { templateId: template.id },
                   async run(api, state, args) {
                     log(`Templates → loading ${args.templateId}`);
-                    const markdown = await fakeTemplateFetch(args.templateId);
-                    api.replaceSelection(markdown);
-                    log(`Templates → applied ${args.templateId}`);
+                    try {
+                      const markdown = await api.runWithBusy(
+                        ({ signal }) => fakeTemplateFetch(args.templateId, signal),
+                        {
+                          label: 'Downloading template...',
+                          detail: `Template: ${args.templateId}`,
+                          lock: true,
+                          scope: 'global',
+                          cancellable: true,
+                        },
+                      );
+                      api.replaceSelection(markdown);
+                      log(`Templates → applied ${args.templateId}`);
+                    } catch (error) {
+                      if (error?.name === 'AbortError') {
+                        log(`Templates → cancelled ${args.templateId}`);
+                        return;
+                      }
+                      throw error;
+                    }
                   },
                 })),
               },
@@ -337,8 +354,8 @@ Click an element in **preview** and the code cursor jumps to the matching line.
       };
     }
 
-    async function fakeTemplateFetch(templateId) {
-      await new Promise((resolve) => setTimeout(resolve, 350));
+    async function fakeTemplateFetch(templateId, signal) {
+      await abortableDelay(3500, signal);
 
       const templates = {
         news: '# News Article\n\n## Lead\n\nShort summary for the article.\n\n## Body\n\n- Key point 1\n- Key point 2\n- Key point 3\n',
@@ -346,6 +363,28 @@ Click an element in **preview** and the code cursor jumps to the matching line.
       };
 
       return templates[templateId] ?? `# Template ${templateId}\n\nNo demo content available.`;
+    }
+
+    function abortableDelay(ms, signal) {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+          return;
+        }
+
+        const timerId = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+
+        const onAbort = () => {
+          clearTimeout(timerId);
+          signal?.removeEventListener('abort', onAbort);
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        };
+
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
     }
 
     // ------------------------------------------------------------------ //
@@ -469,9 +508,26 @@ Click an element in **preview** and the code cursor jumps to the matching line.
         args: { templateId },
         async run(api, state, args) {
           log(`Templates → loading ${args.templateId}`);
-          const markdown = await fakeTemplateFetch(args.templateId);
-          api.setMarkdown(markdown);
-          log(`Templates → applied ${args.templateId}`);
+          try {
+            const markdown = await api.runWithBusy(
+              ({ signal }) => fakeTemplateFetch(args.templateId, signal),
+              {
+                label: 'Downloading template...',
+                detail: `Template: ${args.templateId}`,
+                lock: true,
+                scope: 'global',
+                cancellable: true,
+              },
+            );
+            api.setMarkdown(markdown);
+            log(`Templates → applied ${args.templateId}`);
+          } catch (error) {
+            if (error?.name === 'AbortError') {
+              log(`Templates → cancelled ${args.templateId}`);
+              return;
+            }
+            throw error;
+          }
         },
       });
       log(`upsertDropdownItem() - added ${templateId} to Templates`);

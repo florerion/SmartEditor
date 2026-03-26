@@ -10,5 +10,7 @@ applyTo: "src/plugins/**"
 - Keep actions side-effect aware: prefer API methods (`replaceSelection`, `insertText`, `setMarkdown`) over direct DOM manipulation.
 - Use shared helpers from `src/plugins/utils.js` when behavior matches existing patterns (`wrapSelection`, `prependLines`).
 - For async actions (fetch/upload), handle failures gracefully and avoid partial document corruption.
+- For async actions (fetch/upload), prefer wrapping work in `api.runWithBusy(...)` so lock/spinner/cancel behavior stays consistent with editor core.
+- When async actions are cancellable, honor `AbortSignal` from `runWithBusy` context and handle `AbortError` as a non-fatal user cancel path.
 - Preserve markdown-first output compatibility with `markdown-it` and Eleventy pipeline assumptions.
 - Keep plugin files focused; avoid mixing unrelated action groups in one module.

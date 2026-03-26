@@ -32,6 +32,10 @@ applyTo: "src/core/**"
 	- `getCompatibilityReport`, `getCompatibilityStatus`, `isCompatibilityEnabled`,
 	- `setCompatibilityEnabled`, `setCompatibilityProfile`, `validateCompatibility`,
 	- `proposeCompatibilityFix`, `proposeAllCompatibilityFixes`.
+- Preserve busy/loading orchestration in `EditorCore`:
+	- keep task-token lifecycle semantics for `beginBusyTask`, `updateBusyTask`, `endBusyTask`, `cancelBusyTask`, `runWithBusy`,
+	- keep lock behavior wired through `_applyBusyState()` (toolbar/code editable lock + `aria-busy`),
+	- keep cancellation semantics based on `AbortController` signal propagation to async tasks.
 - Keep naming conventions stable in core-generated markup and selectors:
 	- CSS/UI classes use `se-*`,
 	- custom properties use `--se-*`,

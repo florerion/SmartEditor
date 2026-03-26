@@ -68,6 +68,90 @@ export const EDITOR_STYLES = `
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  position: relative;
+}
+
+.se-editor[aria-busy="true"] .se-panels,
+.se-editor[aria-busy="true"] .se-toolbar-container,
+.se-editor[aria-busy="true"] .se-compatibility-container,
+.se-editor[aria-busy="true"] .se-divider {
+  pointer-events: none;
+}
+
+.se-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10020;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+}
+
+.se-editor[aria-busy="true"] .se-loading-overlay {
+  display: flex;
+}
+
+.se-loading-overlay__card {
+  min-width: min(360px, calc(100% - 28px));
+  max-width: min(520px, calc(100% - 28px));
+  background: var(--se-color-surface, #ffffff);
+  border: 1px solid var(--se-color-border, #d0d7de);
+  border-radius: 10px;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+}
+
+.se-loading-overlay__spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--se-color-accent, #3b82f6) 22%, transparent);
+  border-top-color: var(--se-color-accent, #3b82f6);
+  animation: se-spin 0.75s linear infinite;
+}
+
+.se-loading-overlay__label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--se-color-text, #1a1a1a);
+}
+
+.se-loading-overlay__detail {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--se-color-muted, #6b7280);
+}
+
+.se-loading-overlay__actions {
+  min-height: 30px;
+}
+
+.se-loading-overlay__cancel {
+  border: 1px solid var(--se-color-border, #d0d7de);
+  background: var(--se-color-surface, #ffffff);
+  color: var(--se-color-text, #1a1a1a);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.se-loading-overlay__cancel:hover {
+  border-color: var(--se-color-accent, #3b82f6);
+  background: color-mix(in srgb, var(--se-color-accent, #3b82f6) 10%, var(--se-color-surface, #ffffff));
+}
+
+@keyframes se-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ============================================================

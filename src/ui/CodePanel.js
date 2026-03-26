@@ -1,4 +1,4 @@
-import { EditorState, RangeSetBuilder, Transaction } from '@codemirror/state';
+import { Compartment, EditorState, RangeSetBuilder, Transaction } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -155,6 +155,8 @@ export class CodePanel {
     this._onSelectionChange = opts.onSelectionChange ?? (() => {});
     this._onScroll = opts.onScroll ?? (() => {});
     this._suppressUpdate = false;
+    this._editableCompartment = new Compartment();
+    this._editable = true;
 
     this._view = new EditorView({
       state: this._buildState(opts.value ?? ''),
@@ -356,6 +358,20 @@ export class CodePanel {
 
   focus() { this._view.focus(); }
 
+  /**
+   * Toggle user editing capabilities without replacing editor content.
+   * @param {boolean} editable
+   */
+  setEditable(editable) {
+    const nextEditable = editable !== false;
+    if (nextEditable === this._editable) return;
+
+    this._editable = nextEditable;
+    this._view.dispatch({
+      effects: this._editableCompartment.reconfigure(EditorView.editable.of(nextEditable)),
+    });
+  }
+
   destroy() {
     this._scroller?.removeEventListener('scroll', this._boundScroll);
     this._view.destroy();
@@ -367,6 +383,7 @@ export class CodePanel {
     return EditorState.create({
       doc: value,
       extensions: [
+        this._editableCompartment.of(EditorView.editable.of(this._editable)),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightSpecialChars(),

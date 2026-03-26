@@ -10,6 +10,7 @@ import { ImageResize } from '../ui/ImageResize.js';
 import { DiffModal } from '../ui/DiffModal.js';
 import { DrawioModal } from '../ui/DrawioModal.js';
 import { CompatibilityPanel } from '../ui/CompatibilityPanel.js';
+import { LoadingOverlay } from '../ui/LoadingOverlay.js';
 import { CompatibilityService } from './compat/CompatibilityService.js';
 import { createEleventyCompatibilityProfile } from './compat/CompatibilityProfiles.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
@@ -49,6 +50,12 @@ export class EditorCore {
   *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
    *                                                to use the public hosted version instead.
   * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
+  * @param {object}      [opts.busy]
+  * @param {number}      [opts.busy.showDelay=140] Delay before showing busy overlay (ms)
+  * @param {number}      [opts.busy.minVisible=180] Minimum visible time once shown (ms)
+  * @param {object}      [opts.busy.texts]
+  * @param {string}      [opts.busy.texts.defaultLabel='Working...'] Default overlay label
+  * @param {string}      [opts.busy.texts.cancel='Cancel'] Cancel button label
   * @param {object}      [opts.compatibility]
   * @param {boolean}     [opts.compatibility.enabled=false] Enable compatibility validation + fix proposals
   * @param {boolean}     [opts.compatibility.showPanel=false] Show compatibility status panel above panes
@@ -70,6 +77,7 @@ export class EditorCore {
   * @param {Function}    [opts.onCompatibilityReport]      (report) => void
   * @param {Function}    [opts.onCompatibilityStatusChange] (status, report) => void
   * @param {Function}    [opts.onCompatibilityFixApplied]   (detail) => void
+  * @param {Function}    [opts.onBusyChange]                (busyState) => void
    */
   constructor(element, opts = {}) {
     this._root = element;
@@ -109,6 +117,11 @@ export class EditorCore {
     this._compatibilityReport = _createDisabledCompatibilityReport();
     this._compatibilityShowPanel = opts.compatibility?.showPanel === true || this._compatibilityEnabled;
     this._compatibilityPanelBusy = false;
+    this._busyConfig = _resolveBusyConfig(opts.busy);
+    this._busyTexts = _resolveBusyTexts(opts.busy?.texts);
+    this._busyTasks = new Map();
+    this._busyTaskSeq = 0;
+    this._busyState = _createIdleBusyState();
 
     const compatibilityProfile = opts.compatibility?.profile
       ?? createEleventyCompatibilityProfile({
@@ -131,6 +144,7 @@ export class EditorCore {
     this._buildPreviewPanel();
     this._buildToolbar();
     this._buildCompatibilityPanel();
+    this._buildLoadingOverlay();
     this._buildImageHandler();
 
     registerDefaultActions(this._toolbar);
@@ -188,6 +202,123 @@ export class EditorCore {
   undo() { this._codePanel.undo(); }
   redo() { this._codePanel.redo(); }
   focus() { this._codePanel.focus(); }
+
+  /** @returns {boolean} */
+  isBusy() {
+    return this._busyTasks.size > 0;
+  }
+
+  /** @returns {object} */
+  getBusyState() {
+    return { ...this._busyState };
+  }
+
+  /**
+   * Begin a tracked busy task.
+   *
+   * @param {object} [opts]
+   * @param {string} [opts.label='Working...']
+   * @param {string} [opts.detail='']
+   * @param {string} [opts.scope='global']
+   * @param {boolean} [opts.lock=true]
+   * @param {boolean} [opts.cancellable=true]
+   * @returns {string} Busy token used by update/end/cancel methods.
+   */
+  beginBusyTask(opts = {}) {
+    const token = `busy-${Date.now()}-${++this._busyTaskSeq}`;
+    const canCancel = opts.cancellable !== false;
+
+    this._busyTasks.set(token, {
+      token,
+      order: this._busyTaskSeq,
+      label: _normalizeBusyLabel(opts.label, this._busyTexts.defaultLabel),
+      detail: _normalizeBusyDetail(opts.detail),
+      scope: typeof opts.scope === 'string' && opts.scope.trim() ? opts.scope.trim() : 'global',
+      lock: opts.lock !== false,
+      cancellable: canCancel,
+      controller: canCancel ? new AbortController() : null,
+    });
+
+    this._recomputeBusyState();
+    return token;
+  }
+
+  /**
+   * Update message/details for a tracked busy task.
+   * @param {string} token
+   * @param {object} patch
+   */
+  updateBusyTask(token, patch = {}) {
+    const task = this._busyTasks.get(token);
+    if (!task) return;
+
+    if (typeof patch.label === 'string' && patch.label.trim()) {
+      task.label = patch.label.trim();
+    }
+    if (typeof patch.detail === 'string') {
+      task.detail = patch.detail.trim();
+    }
+
+    this._recomputeBusyState();
+  }
+
+  /**
+   * End a busy task.
+   * @param {string} token
+   */
+  endBusyTask(token) {
+    if (!this._busyTasks.has(token)) return;
+    this._busyTasks.delete(token);
+    this._recomputeBusyState();
+  }
+
+  /**
+   * Cancel one busy task or all busy tasks.
+   * @param {string} [token]
+   */
+  cancelBusyTask(token) {
+    if (typeof token === 'string' && token) {
+      const task = this._busyTasks.get(token);
+      if (!task) return;
+      task.controller?.abort('busy-task-cancelled');
+      this._busyTasks.delete(token);
+      this._recomputeBusyState();
+      return;
+    }
+
+    this._busyTasks.forEach((task) => {
+      task.controller?.abort('busy-task-cancelled');
+    });
+    this._busyTasks.clear();
+    this._recomputeBusyState();
+  }
+
+  /**
+   * Run async operation with tracked busy state.
+   *
+   * @param {(ctx: { token: string, signal: AbortSignal, update: Function }) => Promise<any>} task
+   * @param {object} [opts]
+   * @returns {Promise<any>}
+   */
+  async runWithBusy(task, opts = {}) {
+    if (typeof task !== 'function') {
+      throw new Error('[EditorCore] runWithBusy requires a function task.');
+    }
+
+    const token = this.beginBusyTask(opts);
+    const taskMeta = this._busyTasks.get(token);
+    const signal = taskMeta?.controller?.signal ?? new AbortController().signal;
+
+    try {
+      return await task({
+        token,
+        signal,
+        update: (patch) => this.updateBusyTask(token, patch),
+      });
+    } finally {
+      this.endBusyTask(token);
+    }
+  }
 
   /**
    * @param {'split'|'code'|'preview'|'wysiwyg'} mode
@@ -434,6 +565,7 @@ export class EditorCore {
    * @param {object} [args]
    */
   runCommand(id, args) {
+    if (this._busyState.locked === true) return false;
     this._opts.onCommand?.(id, args);
     return this._toolbar.runAction(id, args);
   }
@@ -680,6 +812,7 @@ export class EditorCore {
     clearTimeout(this._previewDebounce);
     clearTimeout(this._compatibilityDebounce);
     clearTimeout(this._scrollSyncReleaseTimer);
+    this.cancelBusyTask();
     clearTimeout(this._scrollSyncDebounceTimer);
     clearTimeout(this._previewScrollUnlockTimer);
     cancelAnimationFrame(this._codeScrollRaf);
@@ -688,6 +821,7 @@ export class EditorCore {
     this._previewPanel.destroy();
     this._toolbar?.destroy();
     this._compatibilityPanel?.destroy();
+    this._loadingOverlay?.destroy();
     this._imageHandler?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
@@ -700,6 +834,7 @@ export class EditorCore {
 
     this._root.innerHTML = '';
     this._root.removeAttribute('data-theme');
+    this._root.removeAttribute('aria-busy');
     ['se-editor', 'se-mode-split', 'se-mode-code', 'se-mode-preview', 'se-mode-wysiwyg']
       .forEach(c => this._root.classList.remove(c));
   }
@@ -730,6 +865,7 @@ export class EditorCore {
           <div class="se-divider" title="Drag to resize panels"></div>
           <div class="se-panel se-panel--preview"></div>
         </div>
+        <div class="se-loading-overlay" aria-hidden="true"></div>
       </div>
     `;
 
@@ -737,6 +873,7 @@ export class EditorCore {
     this._compatibilityPanelEl = this._root.querySelector('.se-compatibility-container');
     this._codePanelEl = this._root.querySelector('.se-panel--code');
     this._previewPanelEl = this._root.querySelector('.se-panel--preview');
+    this._loadingOverlayEl = this._root.querySelector('.se-loading-overlay');
 
     this._applyMode();
     this._setupDividerResize();
@@ -912,6 +1049,67 @@ export class EditorCore {
     });
 
     this._renderCompatibilityPanel();
+  }
+
+  _buildLoadingOverlay() {
+    if (!this._loadingOverlayEl) return;
+
+    this._loadingOverlay = new LoadingOverlay(this._loadingOverlayEl, {
+      onCancel: (token) => this.cancelBusyTask(token),
+      showDelayMs: this._busyConfig.showDelay,
+      minVisibleMs: this._busyConfig.minVisible,
+      texts: {
+        defaultLabel: this._busyTexts.defaultLabel,
+        cancel: this._busyTexts.cancel,
+      },
+    });
+
+    this._applyBusyState();
+  }
+
+  _recomputeBusyState() {
+    if (!this._busyTasks.size) {
+      this._busyState = _createIdleBusyState();
+      this._applyBusyState();
+      return;
+    }
+
+    const tasks = [...this._busyTasks.values()].sort((a, b) => a.order - b.order);
+    const activeTask = tasks[tasks.length - 1];
+    const locked = tasks.some((task) => task.lock !== false);
+    const cancellableTask = [...tasks].reverse().find((task) => task.cancellable && task.controller);
+
+    this._busyState = {
+      busy: true,
+      count: tasks.length,
+      label: activeTask?.label ?? this._busyTexts.defaultLabel,
+      detail: activeTask?.detail ?? '',
+      scope: activeTask?.scope ?? 'global',
+      locked,
+      canCancel: Boolean(cancellableTask),
+      cancelToken: cancellableTask?.token ?? null,
+    };
+
+    this._applyBusyState();
+  }
+
+  _applyBusyState() {
+    const state = this._busyState;
+    const busy = state.busy === true;
+
+    this._root.setAttribute('aria-busy', busy ? 'true' : 'false');
+    this._toolbar?.setDisabled(state.locked === true);
+    this._codePanel?.setEditable(!(state.locked === true));
+
+    this._loadingOverlay?.render({
+      busy,
+      label: state.label,
+      detail: state.detail,
+      canCancel: state.canCancel,
+      cancelToken: state.cancelToken,
+    });
+
+    this._opts.onBusyChange?.({ ...state });
   }
 
   // ============================================================
@@ -1273,6 +1471,13 @@ export class EditorCore {
       getTheme: () => this.getTheme(),
       setTheme: (theme) => this.setTheme(theme),
       getAvailableThemes: () => this.getAvailableThemes(),
+      isBusy: () => this.isBusy(),
+      getBusyState: () => this.getBusyState(),
+      beginBusyTask: (opts) => this.beginBusyTask(opts),
+      updateBusyTask: (token, patch) => this.updateBusyTask(token, patch),
+      endBusyTask: (token) => this.endBusyTask(token),
+      cancelBusyTask: (token) => this.cancelBusyTask(token),
+      runWithBusy: (task, opts) => this.runWithBusy(task, opts),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       getCompatibilityReport: () => this.getCompatibilityReport(),
       getCompatibilityStatus: () => this.getCompatibilityStatus(),
@@ -1561,6 +1766,48 @@ function _createDisabledCompatibilityReport() {
     previewHtml: '',
     renderError: null,
   };
+}
+
+function _createIdleBusyState() {
+  return {
+    busy: false,
+    count: 0,
+    label: '',
+    detail: '',
+    scope: 'global',
+    locked: false,
+    canCancel: false,
+    cancelToken: null,
+  };
+}
+
+function _resolveBusyConfig(value) {
+  const showDelay = Number.isFinite(value?.showDelay)
+    ? Math.max(0, value.showDelay)
+    : 140;
+  const minVisible = Number.isFinite(value?.minVisible)
+    ? Math.max(0, value.minVisible)
+    : 180;
+
+  return { showDelay, minVisible };
+}
+
+function _resolveBusyTexts(value) {
+  return {
+    defaultLabel: _normalizeBusyLabel(value?.defaultLabel, 'Working...'),
+    cancel: _normalizeBusyLabel(value?.cancel, 'Cancel'),
+  };
+}
+
+function _normalizeBusyLabel(value, fallbackLabel = 'Working...') {
+  if (typeof value !== 'string') return fallbackLabel;
+  const normalized = value.trim();
+  return normalized || fallbackLabel;
+}
+
+function _normalizeBusyDetail(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
 }
 
 function _computeChangedSpans(oldText, newText) {

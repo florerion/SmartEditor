@@ -53,22 +53,51 @@ export class ImageUploadHandler {
 
     this._cbs.onUploadStart?.(file);
 
-    if (this._opts.endpoint) {
-      try {
-        const url = await this._upload(file);
-        this._getAPI().insertText(`![](${url})`);
-        this._cbs.onUploadDone?.(file, url);
-        return;
-      } catch (err) {
-        console.warn('[imageUpload] Upload failed, using base64 fallback:', err.message);
-        this._cbs.onUploadError?.(file, err);
-      }
-    }
+    const api = this._getAPI();
+    const runTask = typeof api.runWithBusy === 'function'
+      ? api.runWithBusy.bind(api)
+      : async (task) => task({ signal: new AbortController().signal, update: () => {} });
 
-    // Fallback: base64
-    const b64 = await this._toBase64(file);
-    this._getAPI().insertText(`![](${b64})`);
-    this._cbs.onUploadDone?.(file, b64);
+    try {
+      await runTask(async ({ signal, update }) => {
+        update({
+          label: 'Uploading image...',
+          detail: file.name ? `File: ${file.name}` : '',
+        });
+
+        if (this._opts.endpoint) {
+          try {
+            const url = await this._upload(file, signal);
+            this._getAPI().insertText(`![](${url})`);
+            this._cbs.onUploadDone?.(file, url);
+            return;
+          } catch (err) {
+            if (_isAbortError(err)) throw err;
+
+            const warningDetail = file.name
+              ? `Upload failed for ${file.name}. Using local fallback.`
+              : 'Upload failed. Using local fallback.';
+            update({ label: 'Uploading image...', detail: warningDetail });
+            console.warn('[imageUpload] Upload failed, using base64 fallback:', err.message);
+            this._cbs.onUploadError?.(file, err);
+          }
+        }
+
+        const b64 = await this._toBase64(file, signal);
+        this._getAPI().insertText(`![](${b64})`);
+        this._cbs.onUploadDone?.(file, b64);
+      }, {
+        label: 'Uploading image...',
+        detail: file.name ? `File: ${file.name}` : '',
+        lock: true,
+        scope: 'global',
+        cancellable: true,
+      });
+    } catch (err) {
+      if (_isAbortError(err)) return;
+      this._cbs.onUploadError?.(file, err);
+      console.warn('[imageUpload] Unexpected error:', err);
+    }
   }
 
   destroy() {
@@ -79,12 +108,12 @@ export class ImageUploadHandler {
 
   // ------ private ------
 
-  async _upload(file) {
+  async _upload(file, signal) {
     const body = new FormData();
     body.append('file', file);
     const headers = { ...this._opts.headers };
 
-    const resp = await fetch(this._opts.endpoint, { method: 'POST', body, headers });
+    const resp = await fetch(this._opts.endpoint, { method: 'POST', body, headers, signal });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
 
     const data = await resp.json();
@@ -92,11 +121,37 @@ export class ImageUploadHandler {
     return data.url;
   }
 
-  _toBase64(file) {
+  _toBase64(file, signal) {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onload  = (e) => resolve(e.target.result);
-      reader.onerror = reject;
+
+      const onAbort = () => {
+        reader.abort();
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      reader.onload = (e) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(e.target.result);
+      };
+      reader.onerror = (error) => {
+        signal?.removeEventListener('abort', onAbort);
+        reject(error);
+      };
+      reader.onabort = () => {
+        signal?.removeEventListener('abort', onAbort);
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      };
+
       reader.readAsDataURL(file);
     });
   }
@@ -154,4 +209,8 @@ export function createImageUploadAction(handler) {
       input.click();
     },
   };
+}
+
+function _isAbortError(error) {
+  return error?.name === 'AbortError';
 }

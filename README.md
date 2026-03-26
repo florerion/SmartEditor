@@ -168,6 +168,10 @@ Importing the library registers the custom element as a side effect.
 | `upload.formats` | `string[]` | common image MIME list | Allowed image MIME types. |
 | `drawio.url` | `string` | `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. |
 | `toolbar` | `object` | `undefined` | Declarative toolbar layout: visible items, grouping, ordering, display mode, and dropdown menus. |
+| `busy.showDelay` | `number` | `140` | Delay (ms) before showing loading overlay (anti-flicker for very fast tasks). |
+| `busy.minVisible` | `number` | `180` | Minimum overlay visibility time (ms) once shown, to avoid flashing. |
+| `busy.texts.defaultLabel` | `string` | `'Working...'` | Default busy label used when task does not provide one. |
+| `busy.texts.cancel` | `string` | `'Cancel'` | Cancel button label in the loading overlay. |
 | `compatibility.enabled` | `boolean` | `false` | Enables publishing-compatibility validation and suggested fixes. |
 | `compatibility.showPanel` | `boolean` | `false` (auto `true` when enabled) | Shows built-in compatibility status panel above editor panes. |
 | `compatibility.debounce` | `number` | `500` | Validation debounce in milliseconds while typing. |
@@ -188,6 +192,7 @@ Importing the library registers the custom element as a side effect.
 | `onCompatibilityReport` | `function` | `undefined` | Called with latest compatibility report object. |
 | `onCompatibilityStatusChange` | `function` | `undefined` | Called with `(status, report)` on status transitions. |
 | `onCompatibilityFixApplied` | `function` | `undefined` | Called after user accepts compatibility fix proposal. |
+| `onBusyChange` | `function` | `undefined` | Called with busy overlay state `{ busy, count, label, detail, scope, locked, canCancel, cancelToken }`. |
 
 ## Compatibility Quick Start (Eleventy)
 
@@ -235,6 +240,14 @@ Notes:
 const editor = createEditor('#editor', {
   value: '# Content',
   scrollSync: true,
+  busy: {
+    showDelay: 160,
+    minVisible: 220,
+    texts: {
+      defaultLabel: 'Przetwarzanie...',
+      cancel: 'Anuluj',
+    },
+  },
   upload: {
     endpoint: '/api/upload',
     headers: { Authorization: `Bearer ${token}` },
@@ -293,6 +306,13 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `setTheme` | `(theme) => string` | Switch theme to `auto` or one of the registered built-in theme ids. |
 | `getTheme` | `() => string` | Read current theme id. |
 | `getAvailableThemes` | `() => { id, label, description, scheme }[]` | List built-in theme metadata for selectors/settings UIs. |
+| `isBusy` | `() => boolean` | Returns whether any tracked async task is currently active. |
+| `getBusyState` | `() => object` | Returns current busy state snapshot. |
+| `beginBusyTask` | `(opts?) => string` | Start a manual busy task and return its token. |
+| `updateBusyTask` | `(token, patch) => void` | Update message/details for a running busy task. |
+| `endBusyTask` | `(token) => void` | End a previously started busy task. |
+| `cancelBusyTask` | `(token?) => void` | Cancel one busy task by token, or all when omitted. |
+| `runWithBusy` | `(task, opts?) => Promise<any>` | Wrap an async task with loading overlay, lock, and optional cancellation signal. |
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
 | `getToolbarConfig` | `() => object \| null` | Get the current declarative toolbar config, if one is active. |
@@ -324,6 +344,23 @@ const accepted = await editor.proposeChange('# Suggested update\n\nGenerated tex
 if (accepted) {
   console.log('Applied');
 }
+```
+
+### Example: wrapping custom async work with loading state
+
+```js
+await editor.runWithBusy(async ({ signal, update }) => {
+  update({ label: 'Downloading template...', detail: 'Template: weekly-report' });
+
+  const response = await fetch('/api/templates/weekly-report', { signal });
+  const markdown = await response.text();
+  editor.replaceSelection(markdown);
+}, {
+  label: 'Downloading template...',
+  detail: 'Template: weekly-report',
+  lock: true,
+  cancellable: true,
+});
 ```
 
 ### Example: proposal apply modes
@@ -422,6 +459,10 @@ const editor = createEditor('#editor', {
   onCommand(id, args) {
     console.log('Action run:', id, args);
   },
+  onBusyChange(state) {
+    // state.busy, state.label, state.detail, state.canCancel
+    console.log('Busy:', state);
+  },
 });
 ```
 
@@ -432,6 +473,7 @@ const editor = createEditor('#editor', {
 - `se-change`: `detail = { markdown, tokens, html }`
 - `se-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
 - `se-preview-click`: `detail = { element, lineRange: { from, to } }`
+- `se-busy-change`: `detail = { busy, count, label, detail, scope, locked, canCancel, cancelToken }`
 
 ```js
 const el = document.querySelector('smart-editor');
