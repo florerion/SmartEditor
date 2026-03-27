@@ -41,13 +41,15 @@ export class PreviewPanel {
    */
   render(html) {
     const clean = DOMPurify.sanitize(html, {
-      ADD_TAGS: ['pre', 'code', 'select', 'option', 'button'],
+      ADD_TAGS: ['pre', 'code', 'select', 'option', 'button', 'input'],
       // Allow data-source-* attributes so sync continues to work after DOMPurify
       ADD_ATTR: [
         'data-source-line',
         'data-source-line-end',
         'class',
         'style',
+        'type',
+        'checked',
         'target',
         'rel',
       ],
@@ -89,6 +91,8 @@ export class PreviewPanel {
       this._handleCopyClick(copyBtn);
       return;
     }
+
+    if (event.target.closest('input[data-se-task-checkbox]')) return;
 
     if (event.target.closest('.se-code-block__lang-select')) return;
 

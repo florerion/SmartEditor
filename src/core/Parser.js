@@ -280,6 +280,7 @@ export class Parser {
 
     const env    = {};
     const tokens = this._md.parse(markdown, env);
+    this._annotateTaskListTokens(tokens);
     const html   = this._md.renderer.render(tokens, this._md.options, env);
     return { html, tokens };
   }
@@ -436,6 +437,48 @@ export class Parser {
         return self.renderToken(tokens, idx, options);
       };
     });
+
+    const origBulletListOpen = md.renderer.rules.bullet_list_open;
+    md.renderer.rules.bullet_list_open = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      if (token.meta?.containsTaskList) {
+        token.attrJoin('class', 'se-task-list');
+      }
+      if (origBulletListOpen) return origBulletListOpen(tokens, idx, options, env, self);
+      return self.renderToken(tokens, idx, options);
+    };
+
+    const origOrderedListOpen = md.renderer.rules.ordered_list_open;
+    md.renderer.rules.ordered_list_open = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      if (token.meta?.containsTaskList) {
+        token.attrJoin('class', 'se-task-list');
+      }
+      if (origOrderedListOpen) return origOrderedListOpen(tokens, idx, options, env, self);
+      return self.renderToken(tokens, idx, options);
+    };
+
+    const origListItemOpen = md.renderer.rules.list_item_open;
+    md.renderer.rules.list_item_open = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      const taskMeta = token.meta?.taskList;
+      if (taskMeta) {
+        token.attrJoin('class', 'se-task-list-item');
+      }
+
+      const openTag = origListItemOpen
+        ? origListItemOpen(tokens, idx, options, env, self)
+        : self.renderToken(tokens, idx, options);
+
+      if (!taskMeta) return openTag;
+
+      const checkedAttr = taskMeta.checked ? ' checked' : '';
+      const lineAttrs = Number.isFinite(taskMeta.line)
+        ? ` data-source-line="${taskMeta.line}" data-source-line-end="${taskMeta.line}"`
+        : '';
+
+      return `${openTag}<input class="se-task-list-item__checkbox" type="checkbox" data-se-task-checkbox${lineAttrs}${checkedAttr}> `;
+    };
 
     // ---- table row / cell tracking ----
     md.renderer.rules.tr_open = (tokens, idx, options, env, self) => {
@@ -687,5 +730,135 @@ export class Parser {
     if (!src || !payload) return null;
 
     return { src, payload };
+  }
+
+  _annotateTaskListTokens(tokens) {
+    const listStack = [];
+
+    tokens.forEach((token, index) => {
+      if (token.type === 'bullet_list_open' || token.type === 'ordered_list_open') {
+        listStack.push(index);
+        return;
+      }
+
+      if (token.type === 'bullet_list_close' || token.type === 'ordered_list_close') {
+        listStack.pop();
+        return;
+      }
+
+      if (token.type !== 'list_item_open') return;
+
+      const task = this._extractTaskListMarker(tokens, index);
+      if (!task) return;
+
+      token.meta = {
+        ...(token.meta ?? {}),
+        taskList: {
+          checked: task.checked,
+          line: token.map?.[0] ?? -1,
+        },
+      };
+
+      this._collapseTaskListItemParagraph(tokens, index);
+
+      const parentListIndex = listStack[listStack.length - 1];
+      if (Number.isInteger(parentListIndex)) {
+        const parentListToken = tokens[parentListIndex];
+        parentListToken.meta = {
+          ...(parentListToken.meta ?? {}),
+          containsTaskList: true,
+        };
+      }
+    });
+  }
+
+  _extractTaskListMarker(tokens, listItemIndex) {
+    const listItemToken = tokens[listItemIndex];
+    if (!listItemToken) return null;
+
+    let inlineToken = null;
+    for (let index = listItemIndex + 1; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (token.type === 'list_item_close' && token.level === listItemToken.level) {
+        break;
+      }
+      if (token.type === 'inline') {
+        inlineToken = token;
+        break;
+      }
+    }
+
+    if (!inlineToken || typeof inlineToken.content !== 'string') return null;
+
+    const markerMatch = inlineToken.content.match(/^\[([ xX])\]\s+/);
+    if (!markerMatch) return null;
+
+    inlineToken.content = inlineToken.content.slice(markerMatch[0].length);
+
+    if (Array.isArray(inlineToken.children)) {
+      this._stripTaskMarkerFromChildren(inlineToken.children, markerMatch[0]);
+    }
+
+    return {
+      checked: markerMatch[1].toLowerCase() === 'x',
+    };
+  }
+
+  _stripTaskMarkerFromChildren(children, markerText) {
+    if (!Array.isArray(children) || !children.length) return;
+    const markerPattern = /^\[([ xX])\]\s+/;
+    const firstText = children.find((child) => child?.type === 'text' && typeof child.content === 'string');
+    if (!firstText) return;
+
+    if (firstText.content.startsWith(markerText)) {
+      firstText.content = firstText.content.slice(markerText.length);
+      return;
+    }
+
+    firstText.content = firstText.content.replace(markerPattern, '');
+  }
+
+  _collapseTaskListItemParagraph(tokens, listItemIndex) {
+    const listItemToken = tokens[listItemIndex];
+    if (!listItemToken) return;
+
+    const closeIndex = this._findMatchingListItemClose(tokens, listItemIndex, listItemToken.level);
+    if (closeIndex < 0) return;
+
+    const paragraphLevel = listItemToken.level + 1;
+    let paragraphOpenIndex = -1;
+
+    for (let index = listItemIndex + 1; index < closeIndex; index++) {
+      const token = tokens[index];
+      if (token.type === 'paragraph_open' && token.level === paragraphLevel) {
+        paragraphOpenIndex = index;
+        break;
+      }
+      if (token.type === 'inline' && token.level === paragraphLevel + 1) {
+        // Tight list item (no explicit paragraph wrappers) — nothing to collapse.
+        return;
+      }
+    }
+
+    if (paragraphOpenIndex < 0) return;
+    tokens[paragraphOpenIndex].hidden = true;
+
+    for (let index = paragraphOpenIndex + 1; index < closeIndex; index++) {
+      const token = tokens[index];
+      if (token.type === 'paragraph_close' && token.level === paragraphLevel) {
+        token.hidden = true;
+        break;
+      }
+    }
+  }
+
+  _findMatchingListItemClose(tokens, openIndex, openLevel) {
+    for (let index = openIndex + 1; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (token.type === 'list_item_close' && token.level === openLevel) {
+        return index;
+      }
+    }
+    return -1;
   }
 }

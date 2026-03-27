@@ -101,6 +101,7 @@ export class AssetUploadHandler {
     // Collects error message from inside the busy task so we can flash it
     // after the task (and its loading overlay) have been dismissed.
     let pendingErrorFlash = null;
+    let pendingSelection = null;
 
     try {
       await runTask(async ({ signal, update }) => {
@@ -112,7 +113,7 @@ export class AssetUploadHandler {
         if (this._resolveEndpoint(file)) {
           try {
             const url = await this._upload(file, signal);
-            this._getAPI().insertText(this._toMarkdown(file, url));
+            pendingSelection = this._insertMarkdown(file, url);
             this._cbs.onUploadDone?.(file, url);
             return;
           } catch (err) {
@@ -147,7 +148,7 @@ export class AssetUploadHandler {
 
         // Image-only fallback path: embed as base64 data URI.
         const b64 = await this._toBase64(file, signal);
-        this._getAPI().insertText(this._toMarkdown(file, b64));
+        pendingSelection = this._insertMarkdown(file, b64);
         this._cbs.onUploadDone?.(file, b64);
       }, {
         label: isImage ? 'Uploading image...' : 'Uploading file...',
@@ -162,6 +163,12 @@ export class AssetUploadHandler {
       console.warn('[assetUpload] Unexpected error:', err);
       this._getAPI().flashError?.(err.message || 'Upload failed');
       return;
+    }
+
+    if (pendingSelection) {
+      const api = this._getAPI();
+      api.setSelection(pendingSelection.from, pendingSelection.to);
+      api.focus?.();
     }
 
     if (pendingErrorFlash) {
@@ -281,13 +288,36 @@ export class AssetUploadHandler {
     }
   }
 
-  _toMarkdown(file, url) {
+  _insertMarkdown(file, url) {
+    const api = this._getAPI();
+    const sel = api.getSelection();
+    const insertPos = sel.to;
+    const payload = this._toMarkdownPayload(file, url);
+
+    api.insertText(payload.markdown, insertPos);
+
+    if (!payload.selection) return null;
+
+    return {
+      from: insertPos + payload.selection.from,
+      to: insertPos + payload.selection.to,
+    };
+  }
+
+  _toMarkdownPayload(file, url) {
     if (_isImageFile(file)) {
-      return `![](${url})`;
+      const alt = _escapeMarkdownLabel(file.name || 'image');
+      return {
+        markdown: `![${alt}](${url})`,
+        selection: { from: 2, to: 2 + alt.length },
+      };
     }
 
     const label = _escapeMarkdownLabel(file.name || 'attachment');
-    return `[${label}](<${url}>)`;
+    return {
+      markdown: `[${label}](<${url}>)`,
+      selection: { from: 1, to: 1 + label.length },
+    };
   }
 }
 

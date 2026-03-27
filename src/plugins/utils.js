@@ -12,8 +12,14 @@
  */
 export function wrapSelection(api, marker, placeholder = 'text') {
   const sel = api.getSelection();
-  const text = sel.text || placeholder;
+  const hasSelection = sel.from !== sel.to;
+  const text = hasSelection ? sel.text : placeholder;
   api.replaceSelection(`${marker}${text}${marker}`);
+
+  if (!hasSelection) {
+    const from = sel.from + marker.length;
+    api.setSelection(from, from + text.length);
+  }
 }
 
 /**
@@ -34,7 +40,7 @@ export function prependLines(api, prefix) {
     i >= from && i <= to ? `${prefix}${line}` : line,
   );
   const newMarkdown = updated.join('\n');
-  api.setMarkdown(newMarkdown);
+  api.setMarkdown(newMarkdown, { preservePreviewScroll: true });
 
   // Calculate cursor position: move it after the prefix on the first affected line
   const firstAffectedLine = lines[from];

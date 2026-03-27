@@ -925,7 +925,7 @@ export const EDITOR_STYLES = `
 /* Task list */
 .se-preview input[type="checkbox"] {
   margin-right: 0.4em;
-  cursor: default;
+  cursor: pointer;
 }
 
 /* ============================================================
