@@ -1497,6 +1497,8 @@ export class EditorCore {
       setSelection: (f, t) => this.setSelection(f, t),
       insertText: (text, pos) => this.insertText(text, pos),
       replaceSelection: (text) => this.replaceSelection(text),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
       registerAction: (def) => this.registerAction(def),
       unregisterAction: (id) => this.unregisterAction(id),
       getToolbarConfig: () => this.getToolbarConfig(),

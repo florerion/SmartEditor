@@ -3,6 +3,24 @@ import { wrapSelection } from './utils.js';
 /** @type {object[]} */
 export const formattingActions = [
   {
+    id: 'undo',
+    title: 'Undo',
+    group: 'history',
+    order: 1,
+    shortcut: 'Ctrl+Z',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>`,
+    run: (api) => api.undo(),
+  },
+  {
+    id: 'redo',
+    title: 'Redo',
+    group: 'history',
+    order: 2,
+    shortcut: 'Ctrl+Y',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>`,
+    run: (api) => api.redo(),
+  },
+  {
     id: 'bold',
     title: 'Bold',
     group: 'inline',
