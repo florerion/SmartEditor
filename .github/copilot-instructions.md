@@ -53,11 +53,13 @@
 - Keep `_renderCodeBlockToolbar()` in `Parser.js` as the single source for code block toolbar HTML; do not duplicate toolbar markup elsewhere.
 - Copy button in preview uses `navigator.clipboard.writeText()`; on success it switches to a checkmark icon (`.is-copied` class) for 1.5 s.
 - `CodePanel.replaceRange(from, to, text, opts)` applies a range change without touching cursor or selection; preserve this semantic.
-- Preview stability lock: when changing a code fence language, capture `scrollTop` before the change and restore it after the full async render cycle (KaTeX → Mermaid → images) using the pin+poll helpers:
+- Preview stability lock: used when changing a code fence language, inserting image markdown, or updating a draw.io diagram — captures `scrollTop` before the change and holds position through the full async render cycle (KaTeX → Mermaid → images):
 	- `_beginPreviewStabilityLock(scrollTop)` — freezes sync, suspends scroll callbacks, sets pin+deadline.
 	- `_schedulePreviewStabilityUnlock(initialDelayMs)` — polls every 90 ms until async work settles or 1200 ms deadline, then calls `_finalizePreviewStabilityLock()`.
 	- `_hasPendingPreviewAsyncWork()` — returns true while Mermaid renders or images are loading.
 	- Do not replace the poll loop with a fixed timer; it must wait for actual async completion.
+	- `insertText()` in `EditorCore` auto-activates the lock when the inserted text contains `![`; do not bypass this by calling `_codePanel.insertText()` directly.
+	- `_upsertDrawioBlock()` explicitly locks around `setMarkdown()` for the update path (sync render, async image).
 - Preview image deletion UX: when an image is selected in preview and user presses `Delete`/`Backspace`, remove the corresponding markdown image token (`![...](...)`, including draw.io variant) rather than deleting a single character from code.
 - Keep preview delete keyboard interception in capture phase so CodeMirror does not consume `Delete` first.
 - `ImageResize` handle uses `position: fixed`; compute handle coordinates in viewport space (do not add `window.scrollX/window.scrollY`).

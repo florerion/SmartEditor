@@ -197,10 +197,25 @@ export class EditorCore {
 
   /**
    * Insert text at cursor (or at explicit character offset).
+   * When the inserted text contains image markdown (`![`) the preview stability
+   * lock is applied automatically so the preview scroll position stays stable
+   * while the new image loads asynchronously.
    * @param {string} text
    * @param {number|null} [position]
    */
-  insertText(text, position = null) { this._codePanel.insertText(text, position); }
+  insertText(text, position = null) {
+    if (/!\[/.test(text)) {
+      const scrollTop = this._previewPanel.getRoot().scrollTop;
+      this._beginPreviewStabilityLock(scrollTop);
+      try {
+        this._codePanel.insertText(text, position);
+      } finally {
+        this._schedulePreviewStabilityUnlock(220);
+      }
+    } else {
+      this._codePanel.insertText(text, position);
+    }
+  }
 
   /** @param {string} text */
   replaceSelection(text) { this._codePanel.replaceSelection(text); }
@@ -1290,11 +1305,20 @@ export class EditorCore {
       const lines = this.getMarkdown().split('\n');
       const newLines = [...lines];
       newLines.splice(existingBlock.start, existingBlock.end - existingBlock.start + 1, lineValue);
-      this.setMarkdown(newLines.join('\n'));
+      // setMarkdown renders the preview synchronously; the updated draw.io image
+      // loads asynchronously, so we pin the scroll until it settles.
+      const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+      this._beginPreviewStabilityLock(previewScrollTop);
+      try {
+        this.setMarkdown(newLines.join('\n'));
+      } finally {
+        this._schedulePreviewStabilityUnlock(220);
+      }
       this._codePanel.scrollToLine(existingBlock.start);
       return;
     }
 
+    // insertText auto-applies the stability lock when '![' is present.
     this.insertText(`\n${lineValue}\n`);
   }
 
