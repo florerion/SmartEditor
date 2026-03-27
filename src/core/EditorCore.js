@@ -108,6 +108,8 @@ export class EditorCore {
     this._codeScrollRaf = null;
     this._previewScrollRaf = null;
     this._pinPreviewScrollTop = null;
+    this._pinPreviewAnchor = null;
+    this._typingPreviewCodeTopLine = null;
     this._pendingMermaidRenders = 0;
     this._pendingPreviewImageLoads = 0;
     this._previewRenderCycleId = 0;
@@ -175,13 +177,30 @@ export class EditorCore {
    * @param {string} markdown
    * @param {object} [opts]
    * @param {boolean} [opts.undoable=true]
+   * @param {boolean} [opts.preservePreviewScroll=false] Keep preview stable through sync + async render cycle
    */
   setMarkdown(markdown, opts = {}) {
     const undoable = opts.undoable !== false;
-    this._state.setValue(markdown, { undoable });
-    this._codePanel.setValue(markdown, undoable);
-    this._updatePreview(markdown);
-    this._scheduleCompatibilityValidation();
+    const preservePreviewScroll = opts.preservePreviewScroll === true;
+
+    if (!preservePreviewScroll) {
+      this._state.setValue(markdown, { undoable });
+      this._codePanel.setValue(markdown, undoable);
+      this._updatePreview(markdown);
+      this._scheduleCompatibilityValidation();
+      return;
+    }
+
+    const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+    this._beginPreviewStabilityLock(previewScrollTop);
+    try {
+      this._state.setValue(markdown, { undoable });
+      this._codePanel.setValue(markdown, undoable);
+      this._updatePreview(markdown);
+      this._scheduleCompatibilityValidation();
+    } finally {
+      this._schedulePreviewStabilityUnlock(220);
+    }
   }
 
   /** @returns {object[]} Full markdown-it token array */
@@ -994,6 +1013,16 @@ export class EditorCore {
     };
 
     this._boundPreviewLanguageChange = (event) => {
+      const taskCheckbox = event.target.closest('input[data-se-task-checkbox]');
+      if (taskCheckbox) {
+        const line = parseInt(taskCheckbox.getAttribute('data-source-line') ?? '-1', 10);
+        if (!Number.isFinite(line)) return;
+
+        event.stopPropagation();
+        this._setTaskListChecked(line, taskCheckbox.checked);
+        return;
+      }
+
       const select = event.target.closest('.se-code-block__lang-select');
       if (!select) return;
 
@@ -1150,7 +1179,18 @@ export class EditorCore {
 
   _schedulePreviewUpdate(value) {
     clearTimeout(this._previewDebounce);
-    this._previewDebounce = setTimeout(() => this._updatePreview(value), 150);
+    this._previewDebounce = setTimeout(() => {
+      const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+      const codeTopLine = this._codePanel.getTopVisibleLine();
+      const previewAnchor = this._buildTypingPreviewAnchor(codeTopLine);
+      this._beginPreviewStabilityLock(previewScrollTop, previewAnchor);
+      try {
+        this._updatePreview(value, { preserveCursorAnchor: false });
+      } finally {
+        this._typingPreviewCodeTopLine = codeTopLine;
+        this._schedulePreviewStabilityUnlock(220);
+      }
+    }, 150);
   }
 
   _scheduleCompatibilityValidation() {
@@ -1161,17 +1201,70 @@ export class EditorCore {
     }, this._compatibilityDebounceMs);
   }
 
-  _updatePreview(markdown) {
+  _updatePreview(markdown, opts = {}) {
+    const preserveCursorAnchor = opts.preserveCursorAnchor === true;
+    const cursorPreviewAnchor = preserveCursorAnchor
+      ? this._captureCursorPreviewAnchor()
+      : null;
+
     this._previewRenderCycleId += 1;
     const { html } = this._parser.render(markdown);
     this._setSelectedPreviewImage(null);
     this._previewPanel.render(html);
     this._renderMath();
+    this._alignPreviewToCodeCursor(cursorPreviewAnchor);
     this._trackPendingPreviewImages(this._previewRenderCycleId);
     // Re-apply pinned scroll after synchronous post-processing.
     this._applyPinnedPreviewScroll();
     this._renderMermaid();
     this._imageResize?.attachHandlers();
+  }
+
+  _alignPreviewToCodeCursor(anchor) {
+    if (!anchor) return;
+    if (this._pinPreviewScrollTop !== null) return;
+    if (this._mode !== 'split' || this._scrollSyncEnabled === false) return;
+
+    const line = anchor.line;
+    const viewportRatio = anchor.viewportRatio;
+    this._sync.scrollPreviewToLine(line, this._previewPanelEl, {
+      behavior: 'auto',
+      targetViewportRatio: viewportRatio,
+      allowLargeBlockRatio: true,
+    });
+  }
+
+  _captureCursorPreviewAnchor() {
+    const line = this._codePanel.getCursorLine();
+    const previewAnchor = this._sync.getPreviewViewportAnchorForLine(line, this._previewPanelEl);
+    if (previewAnchor) return previewAnchor;
+
+    // Fallback keeps behavior deterministic when the line has no mapped preview block.
+    return {
+      line,
+      viewportRatio: this._codePanel.getCursorViewportRatio(),
+    };
+  }
+
+  _capturePreviewPixelAnchorForTopVisibleLine() {
+    const line = this._codePanel.getTopVisibleLine();
+    return this._sync.getPreviewPixelAnchorForLine(line, this._previewPanelEl);
+  }
+
+  _buildTypingPreviewAnchor(codeTopLine) {
+    const topLineChanged = this._typingPreviewCodeTopLine !== null
+      && Number.isFinite(codeTopLine)
+      && codeTopLine !== this._typingPreviewCodeTopLine;
+
+    if (topLineChanged) {
+      return {
+        line: codeTopLine,
+        offsetPx: 0,
+        viewportRatio: 0,
+      };
+    }
+
+    return this._capturePreviewPixelAnchorForTopVisibleLine();
   }
 
   _renderMath() {
@@ -1225,10 +1318,23 @@ export class EditorCore {
 
   _applyPinnedPreviewScroll() {
     if (this._pinPreviewScrollTop === null) return;
-    this._previewPanel.getRoot().scrollTop = this._pinPreviewScrollTop;
+    const root = this._previewPanel.getRoot();
+    const anchor = this._pinPreviewAnchor;
+
+    if (anchor && Number.isFinite(anchor.line) && Number.isFinite(anchor.offsetPx)) {
+      const nextAnchor = this._sync.getPreviewPixelAnchorForLine(anchor.line, root);
+      if (nextAnchor) {
+        const targetTop = Math.max(0, root.scrollTop + nextAnchor.offsetPx - anchor.offsetPx);
+        root.scrollTop = targetTop;
+        this._pinPreviewScrollTop = targetTop;
+        return;
+      }
+    }
+
+    root.scrollTop = this._pinPreviewScrollTop;
   }
 
-  _beginPreviewStabilityLock(scrollTop) {
+  _beginPreviewStabilityLock(scrollTop, anchor = null) {
     this._suspendCodeToPreviewSync = true;
     this._scrollSyncSuppressed = true;
     this._previewPanel.suspendScrollCallbacks();
@@ -1236,6 +1342,7 @@ export class EditorCore {
     clearTimeout(this._previewScrollUnlockTimer);
 
     this._pinPreviewScrollTop = scrollTop;
+    this._pinPreviewAnchor = anchor;
     this._previewPinDeadline = Date.now() + 1200;
   }
 
@@ -1248,6 +1355,7 @@ export class EditorCore {
     this._suspendCodeToPreviewSync = false;
     this._scrollSyncSuppressed = false;
     this._pinPreviewScrollTop = null;
+    this._pinPreviewAnchor = null;
     this._pendingPreviewImageLoads = 0;
     this._previewPinDeadline = 0;
     this._previewScrollUnlockTimer = null;
@@ -1401,6 +1509,9 @@ export class EditorCore {
   }
 
   _handleCodePanelScroll(topLine) {
+    if (!this._scrollSyncSuppressed && Number.isFinite(topLine)) {
+      this._typingPreviewCodeTopLine = topLine;
+    }
     if (this._suspendCodeToPreviewSync) return;
     if (!this._isScrollSyncActive()) return;
     if (this._scrollSyncSource === 'preview') {
@@ -1647,6 +1758,26 @@ export class EditorCore {
     } finally {
       this._schedulePreviewStabilityUnlock(220);
     }
+    return true;
+  }
+
+  _setTaskListChecked(line0, checked) {
+    if (!Number.isFinite(line0) || line0 < 0) return false;
+
+    const markdown = this.getMarkdown();
+    const lines = markdown.split('\n');
+    if (!lines.length || line0 >= lines.length) return false;
+
+    const sourceLine = lines[line0];
+    const markerMatch = sourceLine.match(/^(\s*(?:[-+*]|\d+[.)])\s+)\[(?: |x|X)\](\s*.*)$/);
+    if (!markerMatch) return false;
+
+    const nextLine = `${markerMatch[1]}[${checked ? 'x' : ' '}]${markerMatch[2]}`;
+    if (nextLine === sourceLine) return true;
+
+    const lineStart = this._getCharacterOffsetForLine(lines, line0);
+    const lineEnd = lineStart + sourceLine.length;
+    this._codePanel.replaceRange(lineStart, lineEnd, nextLine);
     return true;
   }
 

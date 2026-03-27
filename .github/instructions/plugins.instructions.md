@@ -8,6 +8,7 @@ applyTo: "src/plugins/**"
 - Implement new editor behavior as toolbar/plugin actions where possible, instead of embedding logic directly in UI components.
 - Follow `registerAction` schema: include stable `id`, meaningful `group`, deterministic `order`, and `run(api, state, args?)`.
 - Keep actions side-effect aware: prefer API methods (`replaceSelection`, `insertText`, `setMarkdown`) over direct DOM manipulation.
+- When an action rewrites the whole document via `setMarkdown(...)`, prefer `setMarkdown(next, { preservePreviewScroll: true })` to avoid preview jumps.
 - Use shared helpers from `src/plugins/utils.js` when behavior matches existing patterns (`wrapSelection`, `prependLines`).
 - For async actions (fetch/upload), handle failures gracefully and avoid partial document corruption.
 - For async actions (fetch/upload), prefer wrapping work in `api.runWithBusy(...)` so lock/spinner/cancel behavior stays consistent with editor core.

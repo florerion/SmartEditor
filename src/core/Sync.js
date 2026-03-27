@@ -26,7 +26,10 @@ export class Sync {
     const targetViewportRatio = Number.isFinite(opts.targetViewportRatio)
       ? opts.targetViewportRatio
       : 0.5;
-    const el = this.scrollPreviewToLine(line, previewRoot, { behavior, targetViewportRatio });
+    const el = this.scrollPreviewToLine(line, previewRoot, {
+      behavior,
+      targetViewportRatio,
+    });
     if (el) this.highlightPreviewElement(el, previewRoot);
   }
 
@@ -48,6 +51,7 @@ export class Sync {
    * @param {'auto'|'smooth'} [opts.behavior='smooth']
    * @param {number} [opts.targetViewportRatio=0.5] Desired vertical ratio (0..1)
   * @param {number} [opts.deadZoneRatio=0.04] Ignore tiny scroll deltas (0..1 of viewport)
+  * @param {boolean} [opts.allowLargeBlockRatio=false] Keep ratio alignment even when the target block is taller than viewport
    * @returns {HTMLElement|null}
    */
   scrollPreviewToLine(line, previewRoot, opts = {}) {
@@ -64,16 +68,18 @@ export class Sync {
       ? opts.deadZoneRatio
       : 0.04;
     const deadZoneRatio = Math.max(0, Math.min(1, rawDeadZoneRatio));
+    const allowLargeBlockRatio = opts.allowLargeBlockRatio === true;
     const rootRect = previewRoot.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
     const viewportHeight = rootRect.height > 0 ? rootRect.height : (previewRoot.clientHeight || 1);
     // Large blocks should anchor at top; smaller blocks can preserve relative height.
-    const effectiveRatio = elRect.height > viewportHeight ? 0 : ratio;
+    const effectiveRatio = elRect.height > viewportHeight && !allowLargeBlockRatio ? 0 : ratio;
     const top = previewRoot.scrollTop
       + (elRect.top - rootRect.top)
       - (effectiveRatio * viewportHeight);
     const targetTop = Math.max(0, top);
     const deadZonePx = Math.max(2, viewportHeight * deadZoneRatio);
+
     if (Math.abs(targetTop - previewRoot.scrollTop) <= deadZonePx) {
       return el;
     }
@@ -129,6 +135,57 @@ export class Sync {
     const rawEnd = el.getAttribute('data-source-line-end');
     const to = rawEnd != null ? parseInt(rawEnd, 10) : from;
     return { from, to };
+  }
+
+  /**
+   * Get the current viewport ratio (0..1) of the element mapped to `line`.
+   * Uses the same closest-line selection semantics as scroll sync.
+   * @param {number} line
+   * @param {HTMLElement} previewRoot
+   * @returns {{ line: number, viewportRatio: number } | null}
+   */
+  getPreviewViewportAnchorForLine(line, previewRoot) {
+    if (!previewRoot || !Number.isFinite(line)) return null;
+    const el = this._findClosestElement(line, previewRoot);
+    if (!el) return null;
+
+    const rootRect = previewRoot.getBoundingClientRect();
+    if (rootRect.height <= 0) return null;
+
+    const elRect = el.getBoundingClientRect();
+    const mappedLine = parseInt(el.getAttribute('data-source-line') ?? '-1', 10);
+    const viewportRatio = Math.max(0, Math.min(1, (elRect.top - rootRect.top) / rootRect.height));
+
+    return {
+      line: Number.isFinite(mappedLine) ? mappedLine : line,
+      viewportRatio,
+    };
+  }
+
+  /**
+   * Capture the current pixel offset of the preview element mapped to `line`.
+   * Useful for preserving the exact on-screen position across a re-render.
+   * @param {number} line
+   * @param {HTMLElement} previewRoot
+   * @returns {{ line: number, offsetPx: number, viewportRatio: number } | null}
+   */
+  getPreviewPixelAnchorForLine(line, previewRoot) {
+    if (!previewRoot || !Number.isFinite(line)) return null;
+    const el = this._findClosestElement(line, previewRoot);
+    if (!el) return null;
+
+    const rootRect = previewRoot.getBoundingClientRect();
+    if (rootRect.height <= 0) return null;
+
+    const elRect = el.getBoundingClientRect();
+    const mappedLine = parseInt(el.getAttribute('data-source-line') ?? '-1', 10);
+    const offsetPx = elRect.top - rootRect.top;
+
+    return {
+      line: Number.isFinite(mappedLine) ? mappedLine : line,
+      offsetPx,
+      viewportRatio: Math.max(0, Math.min(1, offsetPx / rootRect.height)),
+    };
   }
 
   // ------ private ------

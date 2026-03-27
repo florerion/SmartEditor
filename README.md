@@ -312,7 +312,7 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | Method | Signature | Description |
 |---|---|---|
 | `getMarkdown` | `() => string` | Get current markdown string. |
-| `setMarkdown` | `(markdown, opts?)` | Replace full document. `opts.undoable=false` skips undo history entry. |
+| `setMarkdown` | `(markdown, opts?)` | Replace full document. `opts.undoable=false` skips undo history entry. Use `opts.preservePreviewScroll=true` in toolbar/programmatic full-document rewrites to keep preview stable during render. |
 | `getTokens` | `() => object[]` | Get markdown-it token array for current markdown. |
 | `getPreview` | `() => string` | Get sanitized preview HTML. |
 | `getSelection` | `() => { from, to, text, lineFrom, lineTo }` | Current selection info (`line*` are 0-based). |
@@ -606,7 +606,7 @@ const toolbar = {
               async run(api, state, args) {
                 const res = await fetch(`/api/templates/${args.templateId}`);
                 const { markdown } = await res.json();
-                api.setMarkdown(markdown);
+                api.setMarkdown(markdown, { preservePreviewScroll: true });
               },
             },
           ],
@@ -704,7 +704,7 @@ editor.upsertDropdownItem('templates', 'templates-menu', {
   async run(api) {
     const res = await fetch('/api/templates/new');
     const { markdown } = await res.json();
-    api.setMarkdown(markdown);
+    api.setMarkdown(markdown, { preservePreviewScroll: true });
   },
 });
 
@@ -744,6 +744,14 @@ Positioning is supported by optional `{ beforeId, afterId }` for `upsertToolbarI
 - `upsertDropdownItem`, `removeDropdownItem`
 - `openDrawioEditor`
 - `focus`
+
+When an action rewrites the whole document (`setMarkdown(...)`), prefer:
+
+```js
+api.setMarkdown(nextMarkdown, { preservePreviewScroll: true });
+```
+
+This keeps preview stable during synchronous/asynchronous render work and avoids visible jump on toolbar-triggered document rewrites.
 
 ### `state` object available in actions
 

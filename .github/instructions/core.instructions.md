@@ -44,7 +44,9 @@ applyTo: "src/core/**"
 	- `_beginPreviewStabilityLock(scrollTop)` freezes sync + scroll callbacks, sets pin and deadline.
 	- `_schedulePreviewStabilityUnlock(ms)` polls `_hasPendingPreviewAsyncWork()` every 90 ms (1200 ms max) before calling `_finalizePreviewStabilityLock()`.
 	- `_applyPinnedPreviewScroll()` is called after `_renderMath()` in `_updatePreview()` and in each Mermaid `finally` block.
+	- keep anchor-based lock behavior (`_pinPreviewAnchor`) so typing-time updates preserve mapped preview element position.
 	- Do not replace the polling loop with a fixed timeout; the loop must wait for actual Mermaid/image completion.
 	- `insertText()` in `EditorCore` auto-applies the stability lock when the inserted text contains `![` (image markdown); do not bypass this by calling `_codePanel.insertText()` directly for image-bearing inserts.
 	- `_upsertDrawioBlock()` explicitly applies the lock around `setMarkdown()` for the update-existing-block path; preserve this because `setMarkdown` renders synchronously and the replacement image loads asynchronously.
+- Keep `setMarkdown(markdown, { preservePreviewScroll: true })` option behavior stable for programmatic full-document rewrites (toolbar/actions) to avoid preview jumps.
 - `CodePanel.replaceRange(from, to, text, opts)` is a pure document patch without cursor/selection move; preserve this semantic when using it for source edits triggered from preview UI.
