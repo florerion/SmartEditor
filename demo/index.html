@@ -216,6 +216,14 @@ Click an element in **preview** and the code cursor jumps to the matching line.
       return {
         groups: [
           {
+            id: 'history',
+            order: 0,
+            items: [
+              { action: 'undo', display: 'icon' },
+              { action: 'redo', display: 'icon' },
+            ],
+          },
+          {
             id: 'inline',
             order: 10,
             items: [
