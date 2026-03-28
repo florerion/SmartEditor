@@ -428,6 +428,8 @@ Click an element in **preview** and the code cursor jumps to the matching line.
         // Local demo is served from /demo, while bundled draw.io lives in /dist/drawio.
         // Directory URL keeps draw.io relative assets under /dist/drawio/.
         url: '../dist/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1',
+        // Demo should still work when local draw.io cannot initialize.
+        allowHostedFallback: true,
       },
 
       onChange(markdown, tokens, html) {

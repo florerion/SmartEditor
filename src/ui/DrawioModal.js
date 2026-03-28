@@ -1,16 +1,16 @@
 /**
  * draw.io embed modal using postMessage protocol.
  *
- * Works with https://embed.diagrams.net by default. For offline/self-hosted setup,
- * pass a custom URL via EditorCore option `drawio.url`.
+ * Uses hosted draw.io by default. For offline/self-hosted setup,
+ * pass a custom local URL via EditorCore option `drawio.url`.
  */
 export class DrawioModal {
-  /** @param {{ url?: string }} [opts] */
+  /** @param {{ url?: string, allowHostedFallback?: boolean }} [opts] */
   constructor(opts = {}) {
-    // Default points to the self-hosted copy bundled with the editor at dist/drawio/.
-    // Directory URL (with trailing slash) avoids broken relative asset paths on some static servers.
-    this._url = opts.url ?? './drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1';
     this._fallbackUrl = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1';
+    // Use hosted draw.io by default; integrations can override to self-hosted URL.
+    this._url = opts.url ?? this._fallbackUrl;
+    this._allowHostedFallback = opts.allowHostedFallback !== false;
     this._overlay = null;
     this._iframe = null;
     this._resolver = null;
@@ -167,6 +167,7 @@ export class DrawioModal {
 
   _fallbackToHosted(reason) {
     if (!this._iframe) return;
+    if (!this._allowHostedFallback) return;
     if (this._fallbackUsed) return;
     if (this._url === this._fallbackUrl) return;
 

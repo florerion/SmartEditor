@@ -177,7 +177,8 @@ Importing the library registers the custom element as a side effect.
 | `upload.formats` | `string[]` | common image MIME list | Allowed image MIME types. |
 | `upload.fileFormats` | `string[]` | `undefined` | Allowed non-image MIME types/extensions (for example `application/pdf`, `.docx`). If omitted, non-image files are accepted. |
 | `upload.pickerAccept` | `string` | `*/*` | Value for file-picker `accept` attribute. |
-| `drawio.url` | `string` | `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. |
+| `drawio.url` | `string` | `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1` | draw.io embed URL used by modal. Set your own URL for self-hosted/offline mode. |
+| `drawio.allowHostedFallback` | `boolean` | `true` | When `true`, editor retries with `https://embed.diagrams.net` if local/self-hosted draw.io fails to initialize. Set to `false` for strict offline mode. |
 | `toolbar` | `object` | `undefined` | Declarative toolbar layout: visible items, grouping, ordering, display mode, and dropdown menus. |
 | `busy.showDelay` | `number` | `140` | Delay (ms) before showing loading overlay (anti-flicker for very fast tasks). |
 | `busy.minVisible` | `number` | `180` | Minimum overlay visibility time (ms) once shown, to avoid flashing. |
@@ -814,6 +815,62 @@ draw.io diagrams are serialized as one markdown line:
 - `<uri-encoded-xml>` is diagram XML encoded with `encodeURIComponent`.
 - In preview, clicking the image or the `Edit diagram` button opens draw.io modal and preserves XML.
 
+### draw.io URL fallback behavior
+
+By default, editor starts draw.io modal with hosted embed (`https://embed.diagrams.net/?...`).
+If you provide a custom local `drawio.url` and init fails, it retries once with hosted embed.
+
+Use this option to enforce strict offline behavior:
+
+```js
+createEditor(element, {
+  drawio: {
+    url: '/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1',
+    allowHostedFallback: false,
+  },
+});
+```
+
+### Self-hosted draw.io assets (optional)
+
+The npm package ships editor code only (no bundled `dist/drawio` webapp). For offline/self-hosted mode,
+download draw.io assets directly to your application and point `drawio.url` at that location.
+
+```bash
+npx smart-md-editor drawio:download --out ./public/drawio --version latest
+```
+
+Static hosting examples:
+
+```bash
+# Vite / plain static app
+npx smart-md-editor drawio:download --out ./public/drawio --version latest
+
+# Next.js
+npx smart-md-editor drawio:download --out ./public/drawio --version latest
+
+# Any app served from a subpath, e.g. https://example.com/docs/
+npx smart-md-editor drawio:download --out ./public/docs/drawio --version latest
+```
+
+URL mapping:
+
+```txt
+./public/drawio       -> /drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1
+./public/docs/drawio  -> /docs/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1
+```
+
+Then configure editor:
+
+```js
+createEditor(element, {
+  drawio: {
+    url: '/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1',
+    allowHostedFallback: false,
+  },
+});
+```
+
 ### Example
 
 ```md
@@ -865,6 +922,7 @@ Use this section as a compatibility reference when upgrading the editor in host 
 npm install
 npm run build
 npm run dev
+npm run drawio:download
 ```
 
 To run the demo, serve from repository root (not from `demo/`):

@@ -1,6 +1,6 @@
 {
   "name": "smart-md-editor",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
   "type": "module",
   "main": "dist/smart-editor.cjs.js",
@@ -12,9 +12,17 @@
       "require": "./dist/smart-editor.cjs.js"
     }
   },
+  "bin": {
+    "smart-md-editor": "./scripts/download-drawio.mjs"
+  },
   "files": [
-    "dist"
+    "dist/*.js",
+    "dist/*.js.map",
+    "scripts/download-drawio.mjs"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c --watch",
@@ -23,10 +31,11 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "drawio:download": "node scripts/download-drawio.mjs",
-    "postinstall": "node scripts/download-drawio.mjs"
+    "prepack": "npm run build"
   },
   "license": "MIT",
   "dependencies": {
+    "adm-zip": "^0.5.10",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/lang-markdown": "^6.3.1",
     "@codemirror/language": "^6.10.8",
@@ -44,7 +53,6 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/user-event": "^14.6.1",
     "@vitest/coverage-v8": "^4.1.2",
-    "adm-zip": "^0.5.10",
     "jsdom": "^29.0.1",
     "playwright": "^1.58.2",
     "rollup": "^4.34.9",
