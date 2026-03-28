@@ -85,7 +85,9 @@
 - Keep compatibility issue panel behavior stable:
 	- list is scrollable (viewport around three items visible),
 	- issue text click jumps to source line/selection,
-	- fix actions remain mediated by propose/diff acceptance flow.
+	- fix actions remain mediated by propose/diff acceptance flow,
+	- per-issue `Fix` applies only the selected issue (must not normalize the whole table/block),
+	- `Fix all` applies batch normalization across all fixable issues.
 
 ## Scroll Sync
 - Split-mode bidirectional vertical scroll sync is implemented in `EditorCore` (`_handleCodePanelScroll`, `_handlePreviewPanelScroll`).

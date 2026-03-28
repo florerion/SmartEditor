@@ -31,7 +31,9 @@ applyTo: "src/ui/**"
 	- issue list is scrollable with a viewport around three visible rows,
 	- scrollbar colors must respect theme tokens (`--se-color-scrollbar-*`),
 	- each issue shows a code badge and supports click-to-jump behavior,
-	- fix actions remain separate buttons and should not conflict with jump click targets.
+	- fix actions remain separate buttons and should not conflict with jump click targets,
+	- per-item `Fix` must trigger only the clicked issue,
+	- `Fix all` is the only control that applies multi-issue normalization.
 - Keep UI naming consistent with current conventions:
 	- classes/selectors use `se-*`,
 	- style variables use `--se-*`,

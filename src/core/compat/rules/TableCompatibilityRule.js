@@ -19,12 +19,8 @@ export class TableCompatibilityRule {
       const problems = _collectBlockProblems(block);
       if (!problems.length) return;
 
-      const replacementLines = _normalizeBlock(block);
-      const nextMarkdown = _replaceBlock(lines, block.startLine, block.endLine, replacementLines);
-      const blockRange = _lineRangeToOffsets(lines, block.startLine, block.endLine);
-      const newRange = _lineRangeToOffsets(nextMarkdown.split('\n'), block.startLine, block.startLine + replacementLines.length - 1);
-
       problems.forEach((problem, problemIndex) => {
+        const singleFix = _buildSingleProblemFix(lines, block, problem);
         const lineRange = _lineRangeToOffsets(lines, problem.lineFrom, problem.lineTo);
 
         issues.push({
@@ -40,11 +36,11 @@ export class TableCompatibilityRule {
           fixable: true,
           fix: {
             id: `fix-${this.id}-${index + 1}-${problemIndex + 1}`,
-            label: 'Fix table',
-            description: 'Normalizes table markdown to an Eleventy-compatible shape.',
-            nextMarkdown,
-            highlightOld: blockRange,
-            highlightNew: newRange,
+            label: 'Fix issue',
+            description: 'Applies a focused markdown fix for this issue.',
+            nextMarkdown: singleFix.nextMarkdown,
+            highlightOld: singleFix.highlightOld,
+            highlightNew: singleFix.highlightNew,
           },
         });
       });
@@ -216,6 +212,63 @@ function _normalizeBlock(block) {
   });
 }
 
+function _buildSingleProblemFix(lines, block, problem) {
+  const nextLines = [...lines];
+  const rowIndex = problem.lineFrom - block.startLine;
+  const blockRows = block.lines.map((line) => _parseRow(line));
+  const expectedColumns = Math.max(...blockRows.map((row) => row.cells.length));
+  const targetLine = block.lines[rowIndex];
+
+  if (typeof targetLine !== 'string') {
+    const unchangedRange = _lineRangeToOffsets(lines, problem.lineFrom, problem.lineTo);
+    return {
+      nextMarkdown: lines.join('\n'),
+      highlightOld: unchangedRange,
+      highlightNew: unchangedRange,
+    };
+  }
+
+  const nextLine = _fixLineForProblem(targetLine, problem.code, expectedColumns);
+  nextLines[problem.lineFrom] = nextLine;
+
+  const nextMarkdown = nextLines.join('\n');
+  const highlightOld = _lineRangeToOffsets(lines, problem.lineFrom, problem.lineTo);
+  const highlightNew = _lineRangeToOffsets(nextLines, problem.lineFrom, problem.lineTo);
+
+  return {
+    nextMarkdown,
+    highlightOld,
+    highlightNew,
+  };
+}
+
+function _fixLineForProblem(line, code, expectedColumns) {
+  if (code === 'table.missing-leading-pipe') {
+    const leadingWhitespace = line.match(/^\s*/)?.[0] ?? '';
+    const trimmedStart = line.trimStart();
+    return `${leadingWhitespace}| ${trimmedStart}`;
+  }
+
+  if (code === 'table.missing-trailing-pipe') {
+    const withoutTrailingWhitespace = line.replace(/\s*$/, '');
+    return `${withoutTrailingWhitespace} |`;
+  }
+
+  const parsed = _parseRow(line);
+  const padded = _padCells(parsed.cells, expectedColumns);
+
+  if (code === 'table.invalid-separator-row') {
+    const sepCells = padded.map((cell) => _normalizeSeparatorCell(cell));
+    return `| ${sepCells.join(' | ')} |`;
+  }
+
+  if (code === 'table.column-count-mismatch') {
+    return `| ${padded.map((cell) => cell.trim()).join(' | ')} |`;
+  }
+
+  return line;
+}
+
 function _parseRow(line) {
   const raw = String(line ?? '');
   const trimmed = raw.trim();
@@ -250,12 +303,6 @@ function _padCells(cells, count) {
   const next = [...cells];
   while (next.length < count) next.push('');
   return next;
-}
-
-function _replaceBlock(lines, startLine, endLine, replacementLines) {
-  const next = [...lines];
-  next.splice(startLine, endLine - startLine + 1, ...replacementLines);
-  return next.join('\n');
 }
 
 function _lineRangeToOffsets(lines, startLine, endLine) {
