@@ -28,6 +28,9 @@ applyTo: "src/core/**"
 	- insert mode uses `selection.to`.
 - For `replace-all` propose previews, compute and highlight only the true changed span (trim shared prefix/suffix); avoid reverting to full-document highlight.
 - Keep compatibility orchestration in `EditorCore` aligned with `CompatibilityService` contract (`validate`, `buildBatchFix`, profile switching).
+- Preserve compatibility fix intent:
+	- `proposeCompatibilityFix(issueId)` applies only the selected issue fix payload,
+	- `proposeAllCompatibilityFixes()` is the only batch-fix path.
 - Preserve compatibility APIs and status wiring:
 	- `getCompatibilityReport`, `getCompatibilityStatus`, `isCompatibilityEnabled`,
 	- `setCompatibilityEnabled`, `setCompatibilityProfile`, `validateCompatibility`,
