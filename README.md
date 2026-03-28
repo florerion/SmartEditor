@@ -1,5 +1,10 @@
 # Smart Editor
 
+[![CI](https://github.com/florerion/SmartEditor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/florerion/SmartEditor/actions/workflows/ci.yml)
+[![Coverage](https://github.com/florerion/SmartEditor/actions/workflows/coverage.yml/badge.svg?branch=main)](https://github.com/florerion/SmartEditor/actions/workflows/coverage.yml)
+[![GitHub release](https://img.shields.io/github/v/release/florerion/SmartEditor)](https://github.com/florerion/SmartEditor/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A framework-agnostic Markdown editor for web apps with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, and source-line synchronization.
 
 This document is for developers integrating the editor into their own application. It is not an end-user guide for writing Markdown.
@@ -205,7 +210,7 @@ Importing the library registers the custom element as a side effect.
 Use this setup when your production publishing pipeline is Eleventy and you want editor preview/validation to match it as closely as possible.
 
 ```js
-import { createEditor, createEleventyCompatibilityProfile } from 'md-wysiwyg-editor';
+import { createEditor, createEleventyCompatibilityProfile } from 'smart-md-editor';
 import markdownItAnchor from 'markdown-it-anchor';
 import markdownItCollapsible from 'markdown-it-collapsible';
 
@@ -398,7 +403,7 @@ await editor.proposeChange(' inserted chunk ', { mode: 'insert-at-cursor' });
 ### Theme helpers export
 
 ```js
-import { EDITOR_THEME_PRESETS, getEditorThemeList } from 'md-wysiwyg-editor';
+import { EDITOR_THEME_PRESETS, getEditorThemeList } from 'smart-md-editor';
 
 console.log(Object.keys(EDITOR_THEME_PRESETS));
 console.log(getEditorThemeList());

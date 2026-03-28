@@ -3,7 +3,7 @@
 Purpose: portable project context for switching machines/accounts/subscriptions.
 
 ## Repository
-- Name: `md-wysiwyg-editor`
+- Name: `smart-md-editor`
 - Workspace root: `c:\projects\md-wysiwyg-editor`
 - GitHub remote mentioned in repo memory: `florerion/SmartEditor`
 
