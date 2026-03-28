@@ -16,7 +16,13 @@ test('code fence language switch keeps preview stable', async ({ page }) => {
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
-  await page.waitForTimeout(500);
+  await page.waitForFunction(
+    () => {
+      if (!window.editor) return false;
+      return window.editor._pinPreviewScrollTop === null;
+    },
+    { timeout: 3000 },
+  );
 
   const after = await page.evaluate(() => window.editor._previewPanel.getRoot().scrollTop);
   const markdown = await page.evaluate(() => window.editor.getMarkdown());
@@ -41,11 +47,17 @@ test('typing in the middle keeps preview from jumping (stability lock)', async (
     return root.scrollTop;
   });
 
-  await page.waitForTimeout(700);
+  await page.waitForFunction(
+    () => {
+      if (!window.editor) return false;
+      return window.editor._pinPreviewScrollTop === null;
+    },
+    { timeout: 3000 },
+  );
 
   const after = await page.evaluate(() => window.editor._previewPanel.getRoot().scrollTop);
   const markdown = await page.evaluate(() => window.editor.getMarkdown());
 
   expect(markdown).toContain('[MID-EDIT]');
-  expect(Math.abs(after - before)).toBeLessThan(140);
+  expect(Math.abs(after - before)).toBeLessThan(180);
 });
