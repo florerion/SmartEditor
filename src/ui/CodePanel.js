@@ -32,6 +32,11 @@ import {
 const COLLAPSE_MIN_LENGTH = 140;
 const COLLAPSE_HEAD = 5;
 const COLLAPSE_TAIL = 5;
+const ORDERED_LIST_INDENT = '    ';
+const BULLET_LIST_INDENT = '  ';
+const ORDERED_LIST_ITEM_RE = /^(\s*)(\d+)([.)])\s+(.*)$/;
+const BULLET_LIST_ITEM_RE = /^(\s*)([-+*])\s+(.*)$/;
+const LIST_LIKE_LINE_RE = /^\s*(?:\d+[.)]|[-+*])\s+/;
 
 class CollapseWidget extends WidgetType {
   toDOM() {
@@ -61,6 +66,450 @@ const longPayloadCollapsePlugin = ViewPlugin.fromClass(class {
 }, {
   decorations: plugin => plugin.decorations,
 });
+
+/**
+ * markdown-it recognizes nested ordered sublists when the indented marker
+ * starts from `1.` (or `1)`), so Tab on ordered-list lines rewrites marker.
+ * @param {EditorView} view
+ * @returns {boolean}
+ */
+function indentOrderedListItemWithTab(view) {
+  const selection = view.state.selection.main;
+  const doc = view.state.doc;
+  const target = _getOrderedListSelectionTarget(doc, selection);
+  if (!target) return false;
+  const lines = doc.toString().split('\n');
+
+  if (!selection.empty && target.containsMixedListTypes) {
+    for (let index = target.startLineIndex; index <= target.endLineIndex; index++) {
+      const lineText = lines[index];
+      const orderedMatch = lineText.match(ORDERED_LIST_ITEM_RE);
+      if (orderedMatch) {
+        const [, leading, , marker, rest] = orderedMatch;
+        lines[index] = `${leading}${ORDERED_LIST_INDENT}1${marker} ${rest}`;
+        continue;
+      }
+
+      const bulletMatch = lineText.match(BULLET_LIST_ITEM_RE);
+      if (bulletMatch) {
+        const [, leading, marker, rest] = bulletMatch;
+        lines[index] = `${leading}${BULLET_LIST_INDENT}${marker} ${rest}`;
+      }
+    }
+
+    const update = _buildMixedListSelectionUpdate(doc, lines, target);
+
+    view.dispatch({
+      changes: {
+        from: update.blockFrom,
+        to: update.blockTo,
+        insert: update.blockText,
+      },
+      selection: {
+        anchor: update.selectionAnchor,
+        head: update.selectionHead,
+      },
+    });
+    return true;
+  }
+
+  let nextCursorCol = 0;
+
+  for (let index = target.startLineIndex; index <= target.endLineIndex; index++) {
+    const match = lines[index].match(ORDERED_LIST_ITEM_RE);
+    if (!match) return false;
+
+    const [, leading, digits, marker, rest] = match;
+    if (selection.empty && index === target.focusLineIndex) {
+      const markerStart = leading.length;
+      const markerEnd = markerStart + digits.length + 1;
+      nextCursorCol = target.focusColumn + ORDERED_LIST_INDENT.length;
+
+      if (target.focusColumn > markerStart && target.focusColumn <= markerEnd) {
+        nextCursorCol = leading.length + ORDERED_LIST_INDENT.length + 1 + (target.focusColumn - markerStart - 1);
+      } else if (target.focusColumn > markerEnd) {
+        nextCursorCol = target.focusColumn + (ORDERED_LIST_INDENT.length - digits.length + 1);
+      }
+    }
+
+    lines[index] = `${leading}${ORDERED_LIST_INDENT}1${marker} ${rest}`;
+  }
+
+  const update = _buildOrderedListBlockUpdate(doc, lines, target, {
+    mode: selection.empty ? 'cursor' : 'range',
+    cursorCol: nextCursorCol,
+  });
+
+  view.dispatch({
+    changes: {
+      from: update.blockFrom,
+      to: update.blockTo,
+      insert: update.blockText,
+    },
+    selection: {
+      anchor: update.selectionAnchor,
+      head: update.selectionHead,
+    },
+  });
+  return true;
+}
+
+/**
+ * Ordered sublists add four spaces, so Shift-Tab removes the same amount and
+ * reflows numbering for following siblings.
+ * @param {EditorView} view
+ * @returns {boolean}
+ */
+function outdentOrderedListItemWithShiftTab(view) {
+  const selection = view.state.selection.main;
+  const doc = view.state.doc;
+  const target = _getOrderedListSelectionTarget(doc, selection);
+  if (!target) return false;
+  const lines = doc.toString().split('\n');
+
+  if (!selection.empty && target.containsMixedListTypes) {
+    let changed = false;
+
+    for (let index = target.startLineIndex; index <= target.endLineIndex; index++) {
+      const lineText = lines[index];
+      const orderedMatch = lineText.match(ORDERED_LIST_ITEM_RE);
+      if (orderedMatch) {
+        const [, leading, digits, marker, rest] = orderedMatch;
+        const removablePrefix = _extractOrderedListOutdentPrefix(leading);
+        if (!removablePrefix) continue;
+        changed = true;
+        const nextLeading = leading.slice(0, leading.length - removablePrefix.length);
+        lines[index] = `${nextLeading}${digits}${marker} ${rest}`;
+        continue;
+      }
+
+      const bulletMatch = lineText.match(BULLET_LIST_ITEM_RE);
+      if (!bulletMatch) continue;
+
+      const [, leading, marker, rest] = bulletMatch;
+      const removablePrefix = _extractBulletListOutdentPrefix(leading);
+      if (!removablePrefix) continue;
+      changed = true;
+      const nextLeading = leading.slice(0, leading.length - removablePrefix.length);
+      lines[index] = `${nextLeading}${marker} ${rest}`;
+    }
+
+    if (!changed) return true;
+
+    const update = _buildMixedListSelectionUpdate(doc, lines, target);
+
+    view.dispatch({
+      changes: {
+        from: update.blockFrom,
+        to: update.blockTo,
+        insert: update.blockText,
+      },
+      selection: {
+        anchor: update.selectionAnchor,
+        head: update.selectionHead,
+      },
+    });
+    return true;
+  }
+
+  let nextCursorCol = 0;
+  let changed = false;
+
+  for (let index = target.startLineIndex; index <= target.endLineIndex; index++) {
+    const match = lines[index].match(ORDERED_LIST_ITEM_RE);
+    if (!match) return false;
+
+    const [, leading, digits, marker, rest] = match;
+    const removablePrefix = _extractOrderedListOutdentPrefix(leading);
+    if (!removablePrefix) continue;
+
+    changed = true;
+    const nextLeading = leading.slice(0, leading.length - removablePrefix.length);
+    if (selection.empty && index === target.focusLineIndex) {
+      nextCursorCol = Math.max(0, target.focusColumn - removablePrefix.length);
+      const markerStart = leading.length;
+      const markerEnd = markerStart + digits.length + 1;
+
+      if (target.focusColumn > markerStart && target.focusColumn <= markerEnd) {
+        nextCursorCol = nextLeading.length + 1 + (target.focusColumn - markerStart - 1);
+      } else if (target.focusColumn > markerEnd) {
+        nextCursorCol = Math.max(0, target.focusColumn - removablePrefix.length);
+      }
+    }
+
+    lines[index] = `${nextLeading}${digits}${marker} ${rest}`;
+  }
+
+  if (!changed) return true;
+
+  const update = _buildOrderedListBlockUpdate(doc, lines, target, {
+    mode: selection.empty ? 'cursor' : 'range',
+    cursorCol: nextCursorCol,
+  });
+
+  view.dispatch({
+    changes: {
+      from: update.blockFrom,
+      to: update.blockTo,
+      insert: update.blockText,
+    },
+    selection: {
+      anchor: update.selectionAnchor,
+      head: update.selectionHead,
+    },
+  });
+  return true;
+}
+
+function _buildOrderedListBlockUpdate(doc, lines, target, selectionState) {
+  const [blockStart, blockEnd] = _getListBlockBounds(lines, target.startLineIndex);
+  const counters = [];
+
+  for (let index = blockStart; index < target.startLineIndex; index++) {
+    _consumeListLineForOrderedCounters(lines[index], counters);
+  }
+
+  for (let index = target.startLineIndex; index <= blockEnd; index++) {
+    const itemMatch = lines[index].match(ORDERED_LIST_ITEM_RE);
+    if (!itemMatch) {
+      _consumeListLineForOrderedCounters(lines[index], counters);
+      continue;
+    }
+
+    const [, itemLeading, , itemMarker, itemRest] = itemMatch;
+    const nextNumber = _nextOrderedListNumber(counters, _indentWidth(itemLeading));
+    lines[index] = `${itemLeading}${nextNumber}${itemMarker} ${itemRest}`;
+  }
+
+  const blockLines = lines.slice(blockStart, blockEnd + 1);
+  const blockText = blockLines.join('\n');
+  const blockFrom = doc.line(blockStart + 1).from;
+  const blockTo = doc.line(blockEnd + 1).to;
+
+  if (selectionState.mode === 'range') {
+    const startOffset = _lineOffsetWithinBlock(blockLines, target.startLineIndex - blockStart);
+    const endOffset = _lineOffsetWithinBlock(blockLines, target.endLineIndex - blockStart);
+    const endLineLength = blockLines[target.endLineIndex - blockStart]?.length ?? 0;
+
+    return {
+      blockFrom,
+      blockTo,
+      blockText,
+      selectionAnchor: blockFrom + startOffset,
+      selectionHead: blockFrom + endOffset + endLineLength,
+    };
+  }
+
+  const focusIndexInBlock = target.focusLineIndex - blockStart;
+  const finalCurrentLine = blockLines[focusIndexInBlock] ?? '';
+  const finalCursorCol = Math.max(0, Math.min(selectionState.cursorCol, finalCurrentLine.length));
+  const currentLineOffset = _lineOffsetWithinBlock(blockLines, focusIndexInBlock);
+
+  return {
+    blockFrom,
+    blockTo,
+    blockText,
+    selectionAnchor: blockFrom + currentLineOffset + finalCursorCol,
+    selectionHead: blockFrom + currentLineOffset + finalCursorCol,
+  };
+}
+
+function _buildMixedListSelectionUpdate(doc, lines, target) {
+  const normalizedRanges = _renumberOrderedListBlocks(lines, target.orderedLineIndexes ?? []);
+  let replaceStart = target.startLineIndex;
+  let replaceEnd = target.endLineIndex;
+
+  normalizedRanges.forEach(([start, end]) => {
+    replaceStart = Math.min(replaceStart, start);
+    replaceEnd = Math.max(replaceEnd, end);
+  });
+
+  const replaceLines = lines.slice(replaceStart, replaceEnd + 1);
+  const replaceText = replaceLines.join('\n');
+  const replaceFrom = doc.line(replaceStart + 1).from;
+  const replaceTo = doc.line(replaceEnd + 1).to;
+  const selectionStartOffset = _lineOffsetWithinBlock(replaceLines, target.startLineIndex - replaceStart);
+  const selectionEndOffset = _lineOffsetWithinBlock(replaceLines, target.endLineIndex - replaceStart);
+  const selectionEndLength = replaceLines[target.endLineIndex - replaceStart]?.length ?? 0;
+
+  return {
+    blockFrom: replaceFrom,
+    blockTo: replaceTo,
+    blockText: replaceText,
+    selectionAnchor: replaceFrom + selectionStartOffset,
+    selectionHead: replaceFrom + selectionEndOffset + selectionEndLength,
+  };
+}
+
+function _getOrderedListSelectionTarget(doc, selection) {
+  const focusPos = selection.head;
+  const focusLine = doc.lineAt(focusPos);
+  const focusKind = _getListLineKind(focusLine.text);
+  if (selection.empty && focusKind !== 'ordered') return null;
+
+  const focusLineIndex = focusLine.number - 1;
+  const focusColumn = focusPos - focusLine.from;
+
+  if (selection.empty) {
+    return {
+      startLineIndex: focusLineIndex,
+      endLineIndex: focusLineIndex,
+      focusLineIndex,
+      focusColumn,
+    };
+  }
+
+  const startLineIndex = doc.lineAt(Math.min(selection.from, selection.to)).number - 1;
+  const endLookupPos = Math.max(selection.from, selection.to) - 1;
+  const endLineIndex = doc.lineAt(Math.max(selection.from, endLookupPos)).number - 1;
+  let containsMixedListTypes = false;
+  const orderedLineIndexes = [];
+
+  for (let index = startLineIndex; index <= endLineIndex; index++) {
+    const lineText = doc.line(index + 1).text;
+    const kind = _getListLineKind(lineText);
+    if (!kind) {
+      if (_isBlankLine(lineText)) {
+        containsMixedListTypes = true;
+        continue;
+      }
+      return null;
+    }
+    if (kind === 'ordered') {
+      orderedLineIndexes.push(index);
+    } else {
+      containsMixedListTypes = true;
+    }
+  }
+
+  if (!orderedLineIndexes.length) return null;
+
+  return {
+    startLineIndex,
+    endLineIndex,
+    focusLineIndex,
+    focusColumn,
+    containsMixedListTypes,
+    orderedLineIndexes,
+  };
+}
+
+function _renumberOrderedListBlocks(lines, orderedLineIndexes) {
+  const mergedRanges = [];
+
+  orderedLineIndexes
+    .map(index => _getListBlockBounds(lines, index))
+    .sort((a, b) => a[0] - b[0])
+    .forEach(([start, end]) => {
+      const lastRange = mergedRanges[mergedRanges.length - 1];
+      if (lastRange && start <= lastRange[1] + 1) {
+        lastRange[1] = Math.max(lastRange[1], end);
+        return;
+      }
+      mergedRanges.push([start, end]);
+    });
+
+  mergedRanges.forEach(([start, end]) => {
+    const counters = [];
+    for (let index = start; index <= end; index++) {
+      const itemMatch = lines[index].match(ORDERED_LIST_ITEM_RE);
+      if (!itemMatch) {
+        _consumeListLineForOrderedCounters(lines[index], counters);
+        continue;
+      }
+
+      const [, itemLeading, , itemMarker, itemRest] = itemMatch;
+      const nextNumber = _nextOrderedListNumber(counters, _indentWidth(itemLeading));
+      lines[index] = `${itemLeading}${nextNumber}${itemMarker} ${itemRest}`;
+    }
+  });
+
+  return mergedRanges;
+}
+
+function _lineOffsetWithinBlock(blockLines, indexInBlock) {
+  let offset = 0;
+  for (let index = 0; index < indexInBlock; index++) {
+    offset += blockLines[index].length + 1;
+  }
+  return offset;
+}
+
+function _consumeListLineForOrderedCounters(lineText, counters) {
+  const orderedMatch = lineText.match(ORDERED_LIST_ITEM_RE);
+  if (orderedMatch) {
+    _nextOrderedListNumber(counters, _indentWidth(orderedMatch[1]));
+    return;
+  }
+
+  if (!LIST_LIKE_LINE_RE.test(lineText)) return;
+  const indent = _indentWidth((lineText.match(/^(\s*)/) ?? ['', ''])[1]);
+  while (counters.length && counters[counters.length - 1].indent > indent) {
+    counters.pop();
+  }
+}
+
+function _nextOrderedListNumber(counters, indent) {
+  while (counters.length && counters[counters.length - 1].indent > indent) {
+    counters.pop();
+  }
+
+  const top = counters[counters.length - 1];
+  if (top && top.indent === indent) {
+    const next = top.next;
+    top.next += 1;
+    return next;
+  }
+
+  counters.push({ indent, next: 2 });
+  return 1;
+}
+
+function _getListBlockBounds(lines, centerIndex) {
+  let start = centerIndex;
+  let end = centerIndex;
+
+  while (start > 0 && LIST_LIKE_LINE_RE.test(lines[start - 1])) {
+    start -= 1;
+  }
+  while (end < lines.length - 1 && LIST_LIKE_LINE_RE.test(lines[end + 1])) {
+    end += 1;
+  }
+
+  return [start, end];
+}
+
+function _indentWidth(leadingWhitespace) {
+  let width = 0;
+  for (const ch of leadingWhitespace) {
+    width += ch === '\t' ? 4 : 1;
+  }
+  return width;
+}
+
+function _extractOrderedListOutdentPrefix(leadingWhitespace) {
+  if (!leadingWhitespace) return '';
+  if (leadingWhitespace.endsWith(ORDERED_LIST_INDENT)) return ORDERED_LIST_INDENT;
+  if (leadingWhitespace.endsWith('\t')) return '\t';
+  return '';
+}
+
+function _extractBulletListOutdentPrefix(leadingWhitespace) {
+  if (!leadingWhitespace) return '';
+  if (leadingWhitespace.endsWith(BULLET_LIST_INDENT)) return BULLET_LIST_INDENT;
+  if (leadingWhitespace.endsWith('\t')) return '\t';
+  return '';
+}
+
+function _getListLineKind(lineText) {
+  if (ORDERED_LIST_ITEM_RE.test(lineText)) return 'ordered';
+  if (BULLET_LIST_ITEM_RE.test(lineText)) return 'bullet';
+  return null;
+}
+
+function _isBlankLine(lineText) {
+  return lineText.trim().length === 0;
+}
 
 function buildCollapseDecorations(view) {
   const builder = new RangeSetBuilder();
@@ -397,6 +846,8 @@ export class CodePanel {
         highlightActiveLine(),
         markdown(),
         keymap.of([
+          { key: 'Tab', run: indentOrderedListItemWithTab },
+          { key: 'Shift-Tab', run: outdentOrderedListItemWithShiftTab },
           ...defaultKeymap,
           ...historyKeymap,
           indentWithTab,

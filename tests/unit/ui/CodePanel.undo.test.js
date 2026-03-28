@@ -42,4 +42,5 @@ describe('CodePanel', () => {
 
     panel.destroy();
   });
+
 });

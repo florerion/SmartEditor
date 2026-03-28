@@ -1,6 +1,6 @@
 {
   "name": "smart-md-editor",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
   "type": "module",
   "main": "dist/smart-editor.cjs.js",
@@ -22,6 +22,14 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/florerion/SmartEditor.git"
+  },
+  "homepage": "https://florerion.github.io/SmartEditor/",
+  "bugs": {
+    "url": "https://github.com/florerion/SmartEditor/issues"
   },
   "scripts": {
     "build": "rollup -c",
