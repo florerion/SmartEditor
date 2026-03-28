@@ -20,7 +20,8 @@
 - Install dependencies: `npm install`
 - Build: `npm run build`
 - Dev watch: `npm run dev`
-- No test/lint scripts are currently defined in `package.json`; validate changes by running `npm run build`.
+- Unit/integration tests: `npm run test`
+- E2E tests: `npm run test:e2e`
 - Demo is served from repository root (not `demo/`): `npx serve .` then open `/demo/`.
 
 ## Conventions
@@ -115,9 +116,10 @@
 - When adding new tags to preview HTML, update DOMPurify `ADD_TAGS` in `src/ui/PreviewPanel.js`.
 
 ## draw.io Packaging
-- Keep draw.io self-hosted by default:
-	- download source webapp to `vendor/drawio/` via `scripts/download-drawio.mjs`
-	- copy to `dist/drawio/` during `npm run build` (`rollup.config.js`)
-- Do not switch default modal URL back to hosted embed; hosted `embed.diagrams.net` is fallback-only.
-- Keep draw.io version pinned via `DRAWIO_VERSION` constant in `scripts/download-drawio.mjs`; allow override by `DRAWIO_VERSION` env var.
+- Keep npm package lightweight by default: publish editor bundles without bundling `dist/drawio` assets.
+- Runtime default for `DrawioModal` is hosted embed (`https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`).
+- Preserve configurable self-hosted/offline mode through `drawio.url`; keep `drawio.allowHostedFallback` support (strict offline requires `false`).
+- Keep draw.io downloader CLI in `scripts/download-drawio.mjs` stable:
+	- command: `smart-md-editor drawio:download --out <path> --version <version|latest>`
+	- pinned version via `DRAWIO_VERSION` constant with env override support.
 - For demo, keep draw.io URL aligned with repo-root serving model (`npx serve .` + `/demo/`), i.e. resolve from `../dist/drawio/`.

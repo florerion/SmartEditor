@@ -121,18 +121,18 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Clicking a draw.io image in preview opens modal edit for that diagram payload.
 - Toolbar draw.io action always starts from a fresh, blank diagram:
   - `openDrawioEditor({ forceNew: true })`
-- draw.io runtime is self-hosted by default (offline-friendly):
-  - Source is downloaded on install to `vendor/drawio/`.
-  - Build copies `vendor/drawio/` to `dist/drawio/`.
-  - Default modal URL is `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
-  - Demo overrides URL to `../dist/drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
-- Versioning model for bundled draw.io:
+- npm package is lightweight by default (no bundled `dist/drawio` in published tarball).
+- draw.io runtime default is hosted embed:
+  - `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
+- Self-hosted/offline mode is opt-in:
+  - integrator downloads assets with `smart-md-editor drawio:download --out <path> --version <version|latest>`
+  - integrator sets `drawio.url` to local hosted path (for strict offline set `drawio.allowHostedFallback: false`).
+- Runtime resilience:
+  - when custom local `drawio.url` fails (iframe error or no `init` in time), modal can fallback once to hosted embed.
+- Versioning model for downloader:
   - Pinned in `scripts/download-drawio.mjs` as `DRAWIO_VERSION`.
   - Override with environment variable `DRAWIO_VERSION`.
   - `DRAWIO_VERSION=latest` resolves from GitHub Releases API.
-- Runtime resilience:
-  - `DrawioModal` has a guard for self-hosted failures (iframe error or no `init` event in time).
-  - Guard performs one-time fallback to hosted `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
 - Core files involved:
   - `src/core/Parser.js`
   - `src/core/EditorCore.js`
@@ -258,8 +258,9 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 - Install deps: `npm install`
 - Build: `npm run build`
 - Dev watch: `npm run dev`
-- Re-download bundled draw.io manually: `npm run drawio:download`
-- No test/lint scripts defined currently; verify changes with `npm run build`.
+- Download draw.io assets (optional, self-hosted/offline): `npm run drawio:download`
+- Unit/integration tests: `npm run test`
+- E2E tests: `npm run test:e2e`
 
 ## Recommended Handoff Workflow
 1. Pull the latest repository.
@@ -277,5 +278,5 @@ Framework-agnostic Markdown editor with split code/preview UX, runtime API, exte
 Use this project context and instruction files as the source of truth. Before making changes, summarize architecture, constraints, and current status. Then propose and implement minimal, local edits under `src/` and validate with `npm run build`.
 
 ## Last Updated
-- Date: 2026-03-25
+- Date: 2026-03-28
 - Reason: added syntax-highlighted code blocks in preview (highlight.js, language switcher, copy button, scroll-jump stability lock).

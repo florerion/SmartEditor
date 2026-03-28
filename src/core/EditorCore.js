@@ -51,11 +51,11 @@ export class EditorCore {
    * @param {string[]}    [opts.upload.fileFormats] allowed non-image MIME types/extensions (e.g. '.pdf')
    * @param {string}      [opts.upload.pickerAccept] file picker `accept` value (default allows any file)
    * @param {object}      [opts.drawio]
-   * @param {string}      [opts.drawio.url]         Embed URL. Defaults to `./drawio/?embed=1&proto=json&spin=1&ui=min&libraries=1`
-   *                                                (the self-hosted copy bundled in dist/drawio/).
-  *                                                Pass `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`
-   *                                                to use the public hosted version instead.
-  * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
+   * @param {string}      [opts.drawio.url]         Embed URL. Defaults to hosted
+   *                                                `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=min&libraries=1`.
+   *                                                For offline/self-hosted mode pass your own local draw.io URL.
+   * @param {boolean}     [opts.drawio.allowHostedFallback=true] Retry with hosted embed when local draw.io fails to initialize.
+   * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
   * @param {object}      [opts.busy]
   * @param {number}      [opts.busy.showDelay=140] Delay before showing busy overlay (ms)
   * @param {number}      [opts.busy.minVisible=180] Minimum visible time once shown (ms)
@@ -144,7 +144,10 @@ export class EditorCore {
     });
 
     this._diffModal = new DiffModal();
-    this._drawioModal = new DrawioModal({ url: opts.drawio?.url });
+    this._drawioModal = new DrawioModal({
+      url: opts.drawio?.url,
+      allowHostedFallback: opts.drawio?.allowHostedFallback,
+    });
 
     this._injectStyles();
     this._buildDOM();

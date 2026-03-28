@@ -10,3 +10,4 @@ pnpm-debug.log*
 Thumbs.db
 RELEASING.md
 test-results/
+coverage/
