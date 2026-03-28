@@ -157,7 +157,7 @@ export class ImageResize {
       );
     }
 
-    if (newMd !== md) api.setMarkdown(newMd);
+    if (newMd !== md) api.setMarkdown(newMd, { preservePreviewScroll: true });
   }
 }
 
