@@ -1,5 +1,5 @@
 /**
- * md-wysiwyg-editor — public entry point
+ * smart-md-editor — public entry point
  *
  * Exports:
  *  - createEditor(element, options)  Factory function (plain-JS path)
@@ -9,7 +9,7 @@
  * The Web Component is registered as a side-effect of this import:
  *   customElements.define('smart-editor', SmartEditorElement)
  *
- * @module md-wysiwyg-editor
+ * @module smart-md-editor
  */
 
 export { EditorCore } from './core/EditorCore.js';
@@ -29,7 +29,7 @@ import { EditorCore as _EditorCore } from './core/EditorCore.js';
  * @returns {import('./core/EditorCore').EditorCore}
  *
  * @example
- * import { createEditor } from 'md-wysiwyg-editor';
+ * import { createEditor } from 'smart-md-editor';
  *
  * const editor = createEditor('#my-editor', {
  *   value: '# Hello',

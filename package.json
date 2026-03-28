@@ -1,5 +1,5 @@
 {
-  "name": "md-wysiwyg-editor",
+  "name": "smart-md-editor",
   "version": "0.1.0",
   "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
   "type": "module",
@@ -12,10 +12,16 @@
       "require": "./dist/smart-editor.cjs.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "drawio:download": "node scripts/download-drawio.mjs",
     "postinstall": "node scripts/download-drawio.mjs"
   },
@@ -32,9 +38,16 @@
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^15.3.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/coverage-v8": "^4.1.2",
     "adm-zip": "^0.5.10",
-    "rollup": "^4.34.9"
+    "jsdom": "^29.0.1",
+    "playwright": "^1.58.2",
+    "rollup": "^4.34.9",
+    "vitest": "^4.1.2"
   }
 }
