@@ -7,6 +7,12 @@ Purpose: portable project context for switching machines/accounts/subscriptions.
 - Workspace root: `c:\projects\md-wysiwyg-editor`
 - GitHub remote mentioned in repo memory: `florerion/SmartEditor`
 
+## Workflow Snapshot (Current)
+- `CI` (`.github/workflows/ci.yml`): triggers on `pull_request` + manual `workflow_dispatch`; runs `build`, `npm test`, and Playwright e2e.
+- `Coverage` (`.github/workflows/coverage.yml`): triggers on `push` to `main` + manual `workflow_dispatch`; runs `npm run test:coverage`.
+- `Deploy Pages` (`.github/workflows/deploy-pages.yml`): triggers on `push` to `main`.
+- All workflows are pinned to `node-version: 24` and set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`.
+
 ## Naming Snapshot (Current)
 - Web Component tag: `<smart-editor>`
 - Public class export: `SmartEditorElement`
