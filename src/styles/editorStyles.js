@@ -74,6 +74,7 @@ export const EDITOR_STYLES = `
 .se-editor[aria-busy="true"] .se-panels,
 .se-editor[aria-busy="true"] .se-toolbar-container,
 .se-editor[aria-busy="true"] .se-compatibility-container,
+.se-editor[aria-busy="true"] .se-hints-container,
 .se-editor[aria-busy="true"] .se-divider {
   pointer-events: none;
 }
@@ -200,6 +201,84 @@ export const EDITOR_STYLES = `
 
 .se-compatibility-container--hidden {
   display: none;
+}
+
+.se-hints-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--se-color-border, #d0d7de);
+  background: color-mix(in srgb, var(--se-color-surface, #ffffff) 88%, var(--se-color-toolbar-bg, #f6f8fa));
+  font-size: 12px;
+  color: var(--se-color-muted, #6b7280);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  will-change: opacity, transform;
+}
+
+.se-hints-bar.se-hints-bar--is-entering {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+.se-hints-bar.se-hints-bar--is-leaving {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.se-hints-bar__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--se-color-accent-strong, #2563eb);
+  background: color-mix(in srgb, var(--se-color-accent, #3b82f6) 15%, transparent);
+}
+
+.se-hints-bar__content {
+  flex: 1;
+}
+
+.se-hints-bar__prev,
+.se-hints-bar__next,
+.se-hints-bar__dismiss {
+  border: 1px solid var(--se-color-border, #d0d7de);
+  background: var(--se-color-surface, #ffffff);
+  color: var(--se-color-text, #1a1a1a);
+  border-radius: 6px;
+  min-width: 24px;
+  height: 24px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.se-hints-bar__prev:hover,
+.se-hints-bar__next:hover,
+.se-hints-bar__dismiss:hover {
+  border-color: var(--se-color-accent, #3b82f6);
+}
+
+.se-hints-bar--ghost {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.se-hints-bar--ghost:hover {
+  opacity: 1;
 }
 
 .se-compatibility {

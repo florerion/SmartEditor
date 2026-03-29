@@ -39,6 +39,10 @@
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
 - Prefer declarative toolbar composition through `opts.toolbar` for visibility/order/group/display concerns; treat action `group/order` as fallback defaults.
 - For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.
+- Contextual user hints are managed by dedicated hint modules (`HintRegistry`, `HintService`, `HintContextDetector`) plus bottom status UI (`HintsBar`); keep this logic separate from toolbar actions and avoid embedding hint text in action definitions.
+- Hint selection behavior is split between matching and no-match states:
+	- matching hints use `hints.matchSelection` (`first` or `random`),
+	- no-match behavior uses `hints.noMatchFallback` (`random` or `none`).
 - Keep built-in theme definitions centralized in `src/styles/themes.js`; when adding a new built-in preset, include full token set and `swatch` metadata.
 - Keep theme CSS generation centralized via `buildEditorThemeStyles()`; avoid reintroducing hardcoded per-theme blocks in `src/styles/editorStyles.js`.
 - Keep compatibility panel status colors tokenized through theme variables (`--se-color-compat-*`); avoid hardcoded status colors in panel CSS.

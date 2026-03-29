@@ -11,8 +11,12 @@ import { DiffModal } from '../ui/DiffModal.js';
 import { DrawioModal } from '../ui/DrawioModal.js';
 import { CompatibilityPanel } from '../ui/CompatibilityPanel.js';
 import { LoadingOverlay } from '../ui/LoadingOverlay.js';
+import { HintsBar } from '../ui/HintsBar.js';
 import { CompatibilityService } from './compat/CompatibilityService.js';
 import { createEleventyCompatibilityProfile } from './compat/CompatibilityProfiles.js';
+import { HintRegistry } from './hints/HintRegistry.js';
+import { HintService } from './hints/HintService.js';
+import { HintContextDetector } from './hints/HintContextDetector.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
 import { registerDefaultActions } from '../plugins/index.js';
@@ -56,6 +60,15 @@ export class EditorCore {
    *                                                For offline/self-hosted mode pass your own local draw.io URL.
    * @param {boolean}     [opts.drawio.allowHostedFallback=true] Retry with hosted embed when local draw.io fails to initialize.
    * @param {object}      [opts.toolbar]            Declarative toolbar config with explicit groups/items/dropdowns
+  * @param {object}      [opts.hints]
+  * @param {boolean}     [opts.hints.enabled=true] Enable contextual hint system
+  * @param {'first'|'random'} [opts.hints.matchSelection='random'] Selection strategy when many hints match context
+  * @param {'none'|'random'} [opts.hints.noMatchFallback='random'] Behavior when no hints match context
+  * @param {number}      [opts.hints.debounceMs=800] Debounce for context-driven hint updates (ms)
+  * @param {number}      [opts.hints.autoHideMs=5000] Auto-hide timeout for hint bar (ms, 0 to disable)
+  * @param {boolean}     [opts.hints.dismissible=true] Show close button in hint bar
+  * @param {object[]}    [opts.hints.items] Custom hint definitions replacing defaults
+  * @param {Object.<string,string[]>} [opts.hints.actionContexts] Additional toolbar action -> context tags mapping
   * @param {object}      [opts.busy]
   * @param {number}      [opts.busy.showDelay=140] Delay before showing busy overlay (ms)
   * @param {number}      [opts.busy.minVisible=180] Minimum visible time once shown (ms)
@@ -125,6 +138,12 @@ export class EditorCore {
     this._compatibilityReport = _createDisabledCompatibilityReport();
     this._compatibilityShowPanel = opts.compatibility?.showPanel === true || this._compatibilityEnabled;
     this._compatibilityPanelBusy = false;
+    this._hintsConfig = _resolveHintsConfig(opts.hints);
+    this._hintRegistry = null;
+    this._hintService = null;
+    this._hintDetector = null;
+    this._hintsBar = null;
+    this._unsubscribeHintChange = null;
     this._busyConfig = _resolveBusyConfig(opts.busy);
     this._busyTexts = _resolveBusyTexts(opts.busy?.texts);
     this._busyTasks = new Map();
@@ -151,6 +170,7 @@ export class EditorCore {
 
     this._injectStyles();
     this._buildDOM();
+    this._buildHints();
     this._buildCodePanel();
     this._buildPreviewPanel();
     this._buildToolbar();
@@ -620,8 +640,47 @@ export class EditorCore {
    */
   runCommand(id, args) {
     if (this._busyState.locked === true) return false;
-    this._opts.onCommand?.(id, args);
     return this._toolbar.runAction(id, args);
+  }
+
+  /**
+   * Register or replace a single hint definition.
+   * @param {object} hint
+   */
+  registerHint(hint) {
+    if (!this._hintRegistry) return;
+    this._hintRegistry.registerHint(hint);
+  }
+
+  /**
+   * Remove a hint by id.
+   * @param {string} hintId
+   */
+  unregisterHint(hintId) {
+    if (!this._hintRegistry) return;
+    this._hintRegistry.unregisterHint(hintId);
+  }
+
+  /**
+   * Replace all hints in the registry.
+   * @param {object[]} hints
+   */
+  replaceHints(hints) {
+    if (!this._hintRegistry) return;
+    this._hintRegistry.replaceAll(hints);
+  }
+
+  /**
+   * Update hint runtime configuration.
+   * @param {object} patch
+   */
+  updateHintConfig(patch = {}) {
+    this._hintsConfig = _resolveHintsConfig({ ...this._hintsConfig, ...patch });
+    this._hintService?.setConfig(this._hintsConfig);
+    this._hintsBar?.setConfig({
+      autoHideMs: this._hintsConfig.autoHideMs,
+      dismissible: this._hintsConfig.dismissible,
+    });
   }
 
   /**
@@ -876,6 +935,10 @@ export class EditorCore {
     this._toolbar?.destroy();
     this._compatibilityPanel?.destroy();
     this._loadingOverlay?.destroy();
+    this._hintsBar?.destroy();
+    this._hintService?.destroy();
+    this._unsubscribeHintChange?.();
+    this._unsubscribeHintChange = null;
     this._assetHandler?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
@@ -919,6 +982,7 @@ export class EditorCore {
           <div class="se-divider" title="Drag to resize panels"></div>
           <div class="se-panel se-panel--preview"></div>
         </div>
+        <div class="se-hints-container"></div>
         <div class="se-loading-overlay" aria-hidden="true"></div>
       </div>
     `;
@@ -927,6 +991,7 @@ export class EditorCore {
     this._compatibilityPanelEl = this._root.querySelector('.se-compatibility-container');
     this._codePanelEl = this._root.querySelector('.se-panel--code');
     this._previewPanelEl = this._root.querySelector('.se-panel--preview');
+    this._hintsBarEl = this._root.querySelector('.se-hints-container');
     this._loadingOverlayEl = this._root.querySelector('.se-loading-overlay');
 
     this._applyMode();
@@ -947,6 +1012,7 @@ export class EditorCore {
           this._opts.onChange(value, tokens, html);
         }
         this._scheduleCompatibilityValidation();
+        this._updateHintContextFromSelection(this._codePanel.getSelection());
       },
 
       onCursorMove: (line) => {
@@ -969,10 +1035,15 @@ export class EditorCore {
       onSelectionChange: (selInfo) => {
         this._toolbar.updateState();
         this._opts.onSelectionChange?.(selInfo);
+        this._updateHintContextFromSelection(selInfo);
       },
 
       onScroll: (topLine) => {
         this._handleCodePanelScroll(topLine);
+      },
+
+      onHintKey: (payload) => {
+        this._handleHintKey(payload);
       },
     });
 
@@ -1061,7 +1132,73 @@ export class EditorCore {
     this._toolbar = new Toolbar(
       this._toolbarContainer,
       () => this._buildPublicAPI(),
+      {
+        onActionRun: (actionId, args) => {
+          this._opts.onCommand?.(actionId, args);
+          this._handleHintAction(actionId);
+        },
+      },
     );
+  }
+
+  _buildHints() {
+    if (!this._hintsBarEl) return;
+
+    this._hintsBar = new HintsBar(this._hintsBarEl, {
+      autoHideMs: this._hintsConfig.autoHideMs,
+      dismissible: this._hintsConfig.dismissible,
+      onDismiss: (reason) => {
+        this._hintService?.dismiss(reason);
+      },
+    });
+
+    if (!this._hintsConfig.enabled) return;
+
+    this._hintRegistry = new HintRegistry(this._opts.hints?.items);
+    this._hintDetector = new HintContextDetector({
+      actionContexts: this._opts.hints?.actionContexts,
+    });
+    this._hintService = new HintService(this._hintRegistry, this._hintsConfig);
+    this._unsubscribeHintChange = this._hintService.onChange((payload) => {
+      this._applyHintPayload(payload);
+    });
+  }
+
+  _updateHintContextFromSelection(selInfo) {
+    if (!this._hintService || !this._hintDetector) return;
+    const selection = selInfo && Number.isInteger(selInfo.lineFrom)
+      ? selInfo
+      : this.getSelection();
+    const tags = this._hintDetector.contextFromSelection(this._state.value, selection);
+    this._hintService.setContext(tags, { source: 'editor' });
+  }
+
+  _handleHintAction(actionId) {
+    if (!this._hintService || !this._hintDetector) return;
+    const actionTags = this._hintDetector.contextFromAction(actionId);
+    const selectionTags = this._hintDetector.contextFromSelection(this._state.value, this.getSelection());
+    this._hintService.trigger([...new Set([...actionTags, ...selectionTags])], { source: 'toolbar' });
+  }
+
+  _handleHintKey(payload) {
+    if (!this._hintService || !this._hintDetector) return;
+    const keyTags = this._hintDetector.contextFromKey(payload);
+    const selectionTags = this._hintDetector.contextFromSelection(this._state.value, this.getSelection());
+    this._hintService.trigger([...new Set([...keyTags, ...selectionTags])], { source: 'keyboard' });
+  }
+
+  _applyHintPayload(payload) {
+    if (!this._hintsBar) return;
+
+    if (payload?.type === 'show' && payload.hint?.text) {
+      this._hintsBar.show(payload.hint.text, {
+        // Toolbar clicks should always surface immediate guidance.
+        force: payload.source === 'toolbar',
+      });
+      return;
+    }
+
+    this._hintsBar.clear('service-clear');
   }
 
   _buildAssetHandler() {
@@ -1625,6 +1762,10 @@ export class EditorCore {
       upsertDropdownItem: (groupId, dropdownId, item, position) => this.upsertDropdownItem(groupId, dropdownId, item, position),
       removeDropdownItem: (groupId, dropdownId, itemId) => this.removeDropdownItem(groupId, dropdownId, itemId),
       runCommand: (id, args) => this.runCommand(id, args),
+      registerHint: (hint) => this.registerHint(hint),
+      unregisterHint: (hintId) => this.unregisterHint(hintId),
+      replaceHints: (hints) => this.replaceHints(hints),
+      updateHintConfig: (patch) => this.updateHintConfig(patch),
       getTheme: () => this.getTheme(),
       setTheme: (theme) => this.setTheme(theme),
       getAvailableThemes: () => this.getAvailableThemes(),
@@ -1974,6 +2115,17 @@ function _resolveBusyTexts(value) {
   return {
     defaultLabel: _normalizeBusyLabel(value?.defaultLabel, 'Working...'),
     cancel: _normalizeBusyLabel(value?.cancel, 'Cancel'),
+  };
+}
+
+function _resolveHintsConfig(value) {
+  return {
+    enabled: value?.enabled !== false,
+    matchSelection: value?.matchSelection === 'first' ? 'first' : 'random',
+    noMatchFallback: value?.noMatchFallback === 'none' ? 'none' : 'random',
+    debounceMs: Number.isFinite(value?.debounceMs) ? Math.max(0, value.debounceMs) : 800,
+    autoHideMs: Number.isFinite(value?.autoHideMs) ? Math.max(0, value.autoHideMs) : 5000,
+    dismissible: value?.dismissible !== false,
   };
 }
 

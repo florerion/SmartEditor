@@ -8,10 +8,13 @@ export class Toolbar {
   /**
    * @param {HTMLElement} container
    * @param {() => object} getEditorAPI  Lazy accessor — avoids circular dependency
+   * @param {object} [opts]
+   * @param {(actionId: string, args?: object) => void} [opts.onActionRun]
    */
-  constructor(container, getEditorAPI) {
+  constructor(container, getEditorAPI, opts = {}) {
     this._container = container;
     this._getAPI = getEditorAPI;
+    this._onActionRun = opts.onActionRun ?? (() => {});
     /** @type {Map<string, object>} */
     this._actions = new Map();
     this._layoutConfig = null;
@@ -539,6 +542,7 @@ export class Toolbar {
 
     try {
       await definition.run(api, state, args);
+      this._onActionRun(definition.id, args);
     } catch (error) {
       console.error(`[Toolbar] Error in entry "${definition.id}":`, error);
     }

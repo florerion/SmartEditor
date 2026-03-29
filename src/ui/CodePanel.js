@@ -596,6 +596,7 @@ export class CodePanel {
    * @param {Function} opts.onCursorMove     (line: number) => void  — 0-based
    * @param {Function} opts.onSelectionChange (selInfo: object) => void
    * @param {Function} opts.onScroll         (topLine: number) => void  — 0-based
+   * @param {Function} [opts.onHintKey]      (payload: object) => void
    */
   constructor(container, opts) {
     this._container = container;
@@ -603,6 +604,7 @@ export class CodePanel {
     this._onCursorMove = opts.onCursorMove ?? (() => {});
     this._onSelectionChange = opts.onSelectionChange ?? (() => {});
     this._onScroll = opts.onScroll ?? (() => {});
+    this._onHintKey = opts.onHintKey ?? (() => {});
     this._suppressUpdate = false;
     this._editableCompartment = new Compartment();
     this._editable = true;
@@ -846,8 +848,22 @@ export class CodePanel {
         highlightActiveLine(),
         markdown(),
         keymap.of([
-          { key: 'Tab', run: indentOrderedListItemWithTab },
-          { key: 'Shift-Tab', run: outdentOrderedListItemWithShiftTab },
+          {
+            key: 'Tab',
+            run: (view) => {
+              const handled = indentOrderedListItemWithTab(view);
+              this._emitHintKeyEvent(view, 'Tab', handled);
+              return handled;
+            },
+          },
+          {
+            key: 'Shift-Tab',
+            run: (view) => {
+              const handled = outdentOrderedListItemWithShiftTab(view);
+              this._emitHintKeyEvent(view, 'Shift-Tab', handled);
+              return handled;
+            },
+          },
           ...defaultKeymap,
           ...historyKeymap,
           indentWithTab,
@@ -914,5 +930,16 @@ export class CodePanel {
 
   _handleScroll() {
     this._onScroll(this.getTopVisibleLine());
+  }
+
+  _emitHintKeyEvent(view, key, handled) {
+    const head = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(head);
+    this._onHintKey({
+      key,
+      handled,
+      line: line.number - 1,
+      lineText: line.text,
+    });
   }
 }
