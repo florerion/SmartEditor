@@ -4,6 +4,7 @@ import { listActions } from './lists.js';
 import { linkActions } from './links.js';
 import { tableAction, mermaidAction } from './tables.js';
 import { drawioAction } from './drawio.js';
+import { aiAssistantAction } from './assistant.js';
 
 /**
  * Register all built-in toolbar actions on a Toolbar instance.
@@ -20,5 +21,6 @@ export function registerDefaultActions(toolbar) {
     tableAction,
     mermaidAction,
     drawioAction,
+    aiAssistantAction,
   ].forEach(action => toolbar.registerAction(action));
 }
