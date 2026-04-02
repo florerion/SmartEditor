@@ -37,6 +37,9 @@ test('history supports prev and next navigation', async ({ page }) => {
   await page.goto('/demo/');
   await page.waitForFunction(() => Boolean(window.editor));
   await setupDeterministicHints(page);
+  // Extend auto-hide so CI timing cannot push the bar into ghost state
+  // before the prev/next navigation assertions run.
+  await page.evaluate(() => window.editor.updateHintConfig({ autoHideMs: 10000 }));
 
   const boldBtn = page.locator('[data-toolbar-item-id="bold"]').first();
   const italicBtn = page.locator('[data-toolbar-item-id="italic"]').first();
