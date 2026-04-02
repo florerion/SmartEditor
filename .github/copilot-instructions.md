@@ -79,6 +79,15 @@
 	- Prefer `runWithBusy(...)` for async UI operations so lock/spinner/cancel stay consistent.
 	- Preserve busy API surface (`isBusy`, `getBusyState`, `begin/update/end/cancelBusyTask`, `runWithBusy`) and web-component event `se-busy-change`.
 	- Keep busy overlay anti-flicker behavior (`busy.showDelay`, `busy.minVisible`) and configurable labels (`busy.texts.defaultLabel`, `busy.texts.cancel`).
+- AI assistant architecture is provider-first:
+	- Keep prompt templates centralized in `src/core/ai/PromptRegistry.js`; avoid duplicating mode-specific prompts inside providers.
+	- Keep provider-agnostic orchestration in `src/core/ai/AIAssistantService.js`.
+	- Keep concrete Ollama transport in `src/core/ai/OllamaAIProvider.js`; do not couple UI directly to endpoint details.
+	- Keep token-based transport in `src/core/ai/TokenAuthAIProvider.js`; refresh token before `send()` when expired or near expiry (`refreshSkewMs`) and retry once on 401/403 after forced refresh.
+	- Allow integrators to customize prompts by passing `ai.promptRegistry` or provider-level `promptRegistry` without changing UI components.
+	- In-editor assistant UI lives in `src/ui/AIAssistantPanel.js` and is toggled by toolbar action id `ai-assistant`.
+	- Preserve assistant modes and semantics: `review-document`, `improve-selection`, `rewrite-selection`, `chat`.
+	- Applying AI-generated edits should go through `proposeChange(...)` (diff acceptance flow), not direct silent overwrite.
 
 ## Compatibility MVP
 - Default compatibility profile is Eleventy-like (`createEleventyCompatibilityProfile`) and supports markdown-it options, disabled rules, and plugin injection.

@@ -14,6 +14,10 @@
 
 export { EditorCore } from './core/EditorCore.js';
 export { SmartEditorElement } from './adapters/WebComponent.js';
+export { AIAssistantService } from './core/ai/AIAssistantService.js';
+export { PromptRegistry } from './core/ai/PromptRegistry.js';
+export { OllamaAIProvider } from './core/ai/OllamaAIProvider.js';
+export { TokenAuthAIProvider } from './core/ai/TokenAuthAIProvider.js';
 export { EDITOR_THEME_PRESETS, getEditorThemeList } from './styles/themes.js';
 export {
   createMarkdownItCompatibilityProfile,

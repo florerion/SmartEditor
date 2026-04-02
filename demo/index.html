@@ -52,7 +52,7 @@
 
     #editor-container {
       width: 100%;
-      height: calc(100vh - 90px);
+      height: calc(100vh - 140px);
       min-height: 400px;
     }
 
@@ -90,7 +90,9 @@
       <button onclick="removeTemplate()">removeTemplate()</button>
       <button onclick="toggleMode()">toggleMode()</button>
       <button onclick="toggleTheme()">toggleTheme()</button>
-      <div class="controls-hint">Hint: select a text fragment before <code>replace-selection</code>; with no selection this mode falls back to <code>insert-at-cursor</code>. <code>toggleTheme()</code> now cycles through all built-in presets (including <code>solarized</code>, <code>nord</code>, <code>high-contrast</code>).</div>
+      <button onclick="useOllamaProvider()">AI: Ollama</button>
+      <button onclick="useTokenProvider()">AI: token provider</button>
+      <div class="controls-hint">Hint: select a text fragment before <code>replace-selection</code>; with no selection this mode falls back to <code>insert-at-cursor</code>. <code>toggleTheme()</code> now cycles through all built-in presets (including <code>solarized</code>, <code>nord</code>, <code>high-contrast</code>). <code>AI: token provider</code> shows how to swap the default Ollama transport for the generic token-auth provider.</div>
     </div>
   </header>
 
@@ -102,6 +104,8 @@
       createEditor,
       createEleventyCompatibilityProfile,
       getEditorThemeList,
+      OllamaAIProvider,
+      TokenAuthAIProvider,
     } from '../dist/smart-editor.esm.js';
 
     const BUILT_IN_THEMES = getEditorThemeList();
@@ -321,6 +325,13 @@ Click an element in **preview** and the code cursor jumps to the matching line.
             ] : [],
           },
           {
+            id: 'assistant',
+            order: 65,
+            items: [
+              { action: 'ai-assistant', label: 'AI', display: 'icon-label' },
+            ],
+          },
+          {
             id: 'theme',
             order: 70,
             items: [
@@ -396,6 +407,92 @@ Click an element in **preview** and the code cursor jumps to the matching line.
       });
     }
 
+    const DEMO_TOKEN_PROVIDER_CONFIG = {
+      tokenUrl: 'https://example.com/oauth/token',
+      sendUrl: 'https://example.com/api/ai/chat',
+      tokenBody: {
+        client_id: 'demo-client-id',
+        client_secret: 'demo-client-secret',
+        audience: 'smart-editor',
+      },
+      tokenField: 'access_token',
+      expiresInField: 'expires_in',
+      refreshSkewMs: 30_000,
+      model: 'generic-model',
+      temperature: 0.2,
+    };
+
+    function createDemoOllamaProvider() {
+      return new OllamaAIProvider({
+        baseUrl: 'http://localhost:11434',
+        model: 'qwen2.5:7b',
+        temperature: 0.2,
+      });
+    }
+
+    function createDemoTokenProvider() {
+      return new TokenAuthAIProvider({
+        ...DEMO_TOKEN_PROVIDER_CONFIG,
+
+        // Example custom payload shape for an OpenAI-like backend.
+        buildSendPayload(request, ctx) {
+          const wantsJson = request.mode !== 'chat';
+          const payload = {
+            model: ctx.model,
+            temperature: ctx.temperature,
+            messages: [
+              { role: 'system', content: ctx.systemPrompt },
+              {
+                role: 'user',
+                content: [
+                  `Mode: ${request.mode}`,
+                  `Language: ${request.language}`,
+                  `Instruction: ${request.instruction || 'Help with this markdown.'}`,
+                  '',
+                  'Markdown context:',
+                  request.markdown,
+                  '',
+                  'Selection:',
+                  request.selection.text,
+                ].join('\n'),
+              },
+            ],
+          };
+
+          if (wantsJson) {
+            payload.response_format = { type: 'json_object' };
+          }
+
+          return payload;
+        },
+
+        // Example response parser for a provider returning OpenAI-like JSON.
+        parseSendResponse(data, request) {
+          const content = data?.choices?.[0]?.message?.content?.trim?.() ?? '';
+
+          if (request.mode === 'chat') {
+            return {
+              text: content,
+              suggestedMarkdown: '',
+            };
+          }
+
+          try {
+            const parsed = JSON.parse(content);
+            return {
+              text: parsed.text ?? content,
+              suggestedMarkdown: parsed.suggestedMarkdown ?? '',
+            };
+          } catch {
+            return {
+              text: 'Provider returned non-JSON output. Using raw content as suggestion.',
+              suggestedMarkdown: content,
+            };
+          }
+        },
+      });
+    }
+
     // ------------------------------------------------------------------ //
     // Create editor
     // ------------------------------------------------------------------ //
@@ -432,6 +529,16 @@ Click an element in **preview** and the code cursor jumps to the matching line.
         allowHostedFallback: true,
       },
 
+      ai: {
+        enabled: true,
+        language: 'en',
+        ollama: {
+          baseUrl: 'http://localhost:11434',
+          model: 'qwen2.5:7b',
+          temperature: 0.2,
+        },
+      },
+
       onChange(markdown, tokens, html) {
         log(`onChange - ${markdown.length} chars`);
       },
@@ -454,6 +561,14 @@ Click an element in **preview** and the code cursor jumps to the matching line.
           return;
         }
         log(`compatibility fix → ${detail.issueId}`);
+      },
+
+      onAIResponse(result, request) {
+        log(`ai (${request.mode}) → ${result.text.length} chars`);
+      },
+
+      onAIError(error, request) {
+        log(`ai error (${request.mode}) → ${error?.message ?? error}`);
       },
     });
 
@@ -575,6 +690,17 @@ Click an element in **preview** and the code cursor jumps to the matching line.
 
       editor.removeDropdownItem('templates', 'templates-menu', `template-${customTemplate.id}`);
       log(`removeDropdownItem() - removed ${customTemplate.id} from Templates`);
+    };
+
+    window.useOllamaProvider = () => {
+      editor.setAIProvider(createDemoOllamaProvider());
+      log('AI provider -> Ollama (local)');
+    };
+
+    window.useTokenProvider = () => {
+      editor.setAIProvider(createDemoTokenProvider());
+      log('AI provider -> generic token provider (edit DEMO_TOKEN_PROVIDER_CONFIG before real use)');
+      console.info('Edit DEMO_TOKEN_PROVIDER_CONFIG in demo/index.html to point at your auth endpoint and AI endpoint.');
     };
 
     const MODES = ['split', 'code', 'preview', 'wysiwyg'];

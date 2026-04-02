@@ -12,8 +12,11 @@ import { DrawioModal } from '../ui/DrawioModal.js';
 import { CompatibilityPanel } from '../ui/CompatibilityPanel.js';
 import { LoadingOverlay } from '../ui/LoadingOverlay.js';
 import { HintsBar } from '../ui/HintsBar.js';
+import { AIAssistantPanel } from '../ui/AIAssistantPanel.js';
 import { CompatibilityService } from './compat/CompatibilityService.js';
 import { createEleventyCompatibilityProfile } from './compat/CompatibilityProfiles.js';
+import { AIAssistantService } from './ai/AIAssistantService.js';
+import { OllamaAIProvider } from './ai/OllamaAIProvider.js';
 import { HintRegistry } from './hints/HintRegistry.js';
 import { HintService } from './hints/HintService.js';
 import { HintContextDetector } from './hints/HintContextDetector.js';
@@ -75,6 +78,14 @@ export class EditorCore {
   * @param {object}      [opts.busy.texts]
   * @param {string}      [opts.busy.texts.defaultLabel='Working...'] Default overlay label
   * @param {string}      [opts.busy.texts.cancel='Cancel'] Cancel button label
+  * @param {object}      [opts.ai]
+  * @param {boolean}     [opts.ai.enabled=false] Enable in-editor AI assistant panel and API
+  * @param {object}      [opts.ai.provider] Custom provider implementing `send(request, opts)` and optional `isAvailable()`
+  * @param {object}      [opts.ai.promptRegistry] Optional PromptRegistry instance used by built-in providers
+  * @param {object}      [opts.ai.ollama] Convenience config for built-in Ollama provider
+  * @param {string}      [opts.ai.ollama.baseUrl='http://localhost:11434'] Ollama API base URL
+  * @param {string}      [opts.ai.ollama.model='qwen2.5:7b'] Model name used by Ollama provider
+  * @param {number}      [opts.ai.ollama.temperature=0.2] Sampling temperature for Ollama provider
   * @param {object}      [opts.compatibility]
   * @param {boolean}     [opts.compatibility.enabled=false] Enable compatibility validation + fix proposals
   * @param {boolean}     [opts.compatibility.showPanel=false] Show compatibility status panel above panes
@@ -97,6 +108,8 @@ export class EditorCore {
   * @param {Function}    [opts.onCompatibilityStatusChange] (status, report) => void
   * @param {Function}    [opts.onCompatibilityFixApplied]   (detail) => void
   * @param {Function}    [opts.onBusyChange]                (busyState) => void
+  * @param {Function}    [opts.onAIResponse]                (result, request) => void
+  * @param {Function}    [opts.onAIError]                   (error, request) => void
    */
   constructor(element, opts = {}) {
     this._root = element;
@@ -144,6 +157,10 @@ export class EditorCore {
     this._hintDetector = null;
     this._hintsBar = null;
     this._unsubscribeHintChange = null;
+    this._aiConfig = _resolveAIConfig(opts.ai);
+    this._aiService = null;
+    this._aiPanel = null;
+    this._lastAIResult = null;
     this._busyConfig = _resolveBusyConfig(opts.busy);
     this._busyTexts = _resolveBusyTexts(opts.busy?.texts);
     this._busyTasks = new Map();
@@ -175,6 +192,7 @@ export class EditorCore {
     this._buildPreviewPanel();
     this._buildToolbar();
     this._buildCompatibilityPanel();
+    this._buildAIAssistant();
     this._buildLoadingOverlay();
     this._buildAssetHandler();
 
@@ -684,6 +702,107 @@ export class EditorCore {
   }
 
   /**
+   * @returns {boolean}
+   */
+  isAIAssistantEnabled() {
+    return this._aiConfig.enabled === true;
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  isAIAssistantOpen() {
+    return this._aiPanel?.isOpen() === true;
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  openAIAssistantPanel() {
+    if (!this.isAIAssistantEnabled()) return false;
+    this._aiPanel?.open();
+    this._refreshAIProviderAvailability();
+    return this.isAIAssistantOpen();
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  closeAIAssistantPanel() {
+    this._aiPanel?.close();
+    return this.isAIAssistantOpen();
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  toggleAIAssistantPanel() {
+    if (!this.isAIAssistantEnabled()) return false;
+    const isOpen = this._aiPanel?.toggle() === true;
+    if (isOpen) this._refreshAIProviderAvailability();
+    return isOpen;
+  }
+
+  /**
+   * @param {object|null} provider
+   */
+  setAIProvider(provider) {
+    this._ensureAIService();
+    this._aiService.setProvider(provider);
+    this._aiConfig.provider = provider;
+    this._refreshAIProviderAvailability();
+  }
+
+  /** @returns {object|null} */
+  getAIProvider() {
+    return this._aiService?.getProvider() ?? null;
+  }
+
+  /**
+   * @param {object} request
+   * @param {'review-document'|'improve-selection'|'rewrite-selection'|'chat'} [request.mode]
+   * @param {string} [request.instruction]
+   * @param {string} [request.language='pl']
+   * @returns {Promise<{ mode: string, text: string, suggestedMarkdown: string }>}
+   */
+  async requestAIAssistant(request = {}) {
+    this._ensureAIService();
+
+    const mode = request.mode ?? 'chat';
+    const selection = this.getSelection();
+    const payload = {
+      mode,
+      instruction: request.instruction ?? '',
+      language: request.language ?? this._aiConfig.language,
+      markdown: this.getMarkdown(),
+      selection,
+    };
+
+    try {
+      const result = await this.runWithBusy(
+        ({ signal }) => this._aiService.execute(payload, { signal }),
+        {
+          label: 'AI assistant is working...',
+          detail: this._describeAIRequest(mode),
+          scope: 'assistant',
+          lock: false,
+          cancellable: true,
+        },
+      );
+
+      this._lastAIResult = {
+        ...result,
+        request: payload,
+      };
+      this._opts.onAIResponse?.(result, payload);
+      return result;
+    } catch (error) {
+      this._opts.onAIError?.(error, payload);
+      throw error;
+    }
+  }
+
+  /**
    * Open draw.io editor and upsert a `![draw.io](image){xml}` line.
    *
    * @param {object} [opts]
@@ -936,6 +1055,7 @@ export class EditorCore {
     this._compatibilityPanel?.destroy();
     this._loadingOverlay?.destroy();
     this._hintsBar?.destroy();
+    this._aiPanel?.destroy();
     this._hintService?.destroy();
     this._unsubscribeHintChange?.();
     this._unsubscribeHintChange = null;
@@ -983,6 +1103,7 @@ export class EditorCore {
           <div class="se-panel se-panel--preview"></div>
         </div>
         <div class="se-hints-container"></div>
+        <div class="se-ai-assistant-container"></div>
         <div class="se-loading-overlay" aria-hidden="true"></div>
       </div>
     `;
@@ -992,6 +1113,7 @@ export class EditorCore {
     this._codePanelEl = this._root.querySelector('.se-panel--code');
     this._previewPanelEl = this._root.querySelector('.se-panel--preview');
     this._hintsBarEl = this._root.querySelector('.se-hints-container');
+    this._aiPanelEl = this._root.querySelector('.se-ai-assistant-container');
     this._loadingOverlayEl = this._root.querySelector('.se-loading-overlay');
 
     this._applyMode();
@@ -1266,6 +1388,88 @@ export class EditorCore {
     });
 
     this._applyBusyState();
+  }
+
+  _buildAIAssistant() {
+    if (!this._aiPanelEl || !this._aiConfig.enabled) {
+      if (this._aiPanelEl) this._aiPanelEl.hidden = true;
+      return;
+    }
+
+    this._aiPanelEl.hidden = false;
+
+    this._ensureAIService();
+
+    this._aiPanel = new AIAssistantPanel(this._aiPanelEl, {
+      onSubmit: async (payload) => {
+        this._aiPanel?.setBusy(true);
+        this._aiPanel?.setStatus('Wysyłam zapytanie do modelu...');
+
+        try {
+          const result = await this.requestAIAssistant(payload);
+          this._aiPanel?.setResult(result);
+          this._aiPanel?.setStatus('Gotowe.');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this._aiPanel?.setStatus(`Błąd: ${message}`);
+          this.flashError(message);
+        } finally {
+          this._aiPanel?.setBusy(false);
+        }
+      },
+      onApplySuggestion: async () => {
+        await this._applyLastAISuggestion();
+      },
+    });
+  }
+
+  _ensureAIService() {
+    if (this._aiService) return;
+
+    const provider = this._aiConfig.provider
+      ?? new OllamaAIProvider({
+        ...this._aiConfig.ollama,
+        promptRegistry: this._aiConfig.promptRegistry,
+      });
+
+    this._aiService = new AIAssistantService({ provider });
+  }
+
+  async _refreshAIProviderAvailability() {
+    if (!this._aiPanel || !this._aiService) return;
+
+    this._aiPanel.setStatus('Sprawdzam połączenie z providerem AI...');
+
+    const available = await this._aiService.isAvailable();
+    this._aiPanel.setStatus(
+      available
+        ? 'Provider AI jest dostępny.'
+        : 'Provider AI jest niedostępny. Sprawdź lokalny serwer modelu.',
+    );
+  }
+
+  async _applyLastAISuggestion() {
+    const suggestion = this._lastAIResult?.suggestedMarkdown;
+    if (!suggestion || !suggestion.trim()) return false;
+
+    const mode = this._lastAIResult?.mode;
+    const requestSelection = this._lastAIResult?.request?.selection;
+
+    if (mode === 'improve-selection' || mode === 'rewrite-selection') {
+      const from = Number.isFinite(requestSelection?.from) ? requestSelection.from : 0;
+      const to = Number.isFinite(requestSelection?.to) ? requestSelection.to : 0;
+      this.setSelection(from, to);
+      return this.proposeChange(suggestion, { mode: 'replace-selection' });
+    }
+
+    return this.proposeChange(suggestion, { mode: 'replace-all' });
+  }
+
+  _describeAIRequest(mode) {
+    if (mode === 'review-document') return 'Analyzing document...';
+    if (mode === 'improve-selection') return 'Improving selected fragment...';
+    if (mode === 'rewrite-selection') return 'Rewriting selected fragment...';
+    return 'Answering question...';
   }
 
   _recomputeBusyState() {
@@ -1777,6 +1981,14 @@ export class EditorCore {
       cancelBusyTask: (token) => this.cancelBusyTask(token),
       runWithBusy: (task, opts) => this.runWithBusy(task, opts),
       flashError: (message, durationMs) => this.flashError(message, durationMs),
+      isAIAssistantEnabled: () => this.isAIAssistantEnabled(),
+      isAIAssistantOpen: () => this.isAIAssistantOpen(),
+      openAIAssistantPanel: () => this.openAIAssistantPanel(),
+      closeAIAssistantPanel: () => this.closeAIAssistantPanel(),
+      toggleAIAssistantPanel: () => this.toggleAIAssistantPanel(),
+      setAIProvider: (provider) => this.setAIProvider(provider),
+      getAIProvider: () => this.getAIProvider(),
+      requestAIAssistant: (request) => this.requestAIAssistant(request),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       getCompatibilityReport: () => this.getCompatibilityReport(),
       getCompatibilityStatus: () => this.getCompatibilityStatus(),
@@ -2126,6 +2338,28 @@ function _resolveHintsConfig(value) {
     debounceMs: Number.isFinite(value?.debounceMs) ? Math.max(0, value.debounceMs) : 800,
     autoHideMs: Number.isFinite(value?.autoHideMs) ? Math.max(0, value.autoHideMs) : 5000,
     dismissible: value?.dismissible !== false,
+  };
+}
+
+function _resolveAIConfig(value) {
+  return {
+    enabled: value?.enabled === true,
+    language: typeof value?.language === 'string' && value.language.trim()
+      ? value.language.trim()
+      : 'pl',
+    provider: value?.provider ?? null,
+    promptRegistry: value?.promptRegistry ?? null,
+    ollama: {
+      baseUrl: typeof value?.ollama?.baseUrl === 'string' && value.ollama.baseUrl.trim()
+        ? value.ollama.baseUrl.trim()
+        : 'http://localhost:11434',
+      model: typeof value?.ollama?.model === 'string' && value.ollama.model.trim()
+        ? value.ollama.model.trim()
+        : 'qwen2.5:7b',
+      temperature: Number.isFinite(value?.ollama?.temperature)
+        ? Math.max(0, Math.min(2, value.ollama.temperature))
+        : 0.2,
+    },
   };
 }
 

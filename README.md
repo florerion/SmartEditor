@@ -11,20 +11,21 @@ This document is for developers integrating the editor into their own applicatio
 
 ## Contents
 
-- Getting Started
-- Supported Code Block Languages
-- Embedding the Editor on a Page
-- Configuration Options
-- Runtime API
-- Events and Callback Usage
-- Built-in Plugins and Features
-- Extending Functionality (Custom Toolbar Buttons)
-- Versioned API Changes
-- Markdown Compatibility Notes
-- Security Notes
-- License
-- Development Commands
-- Troubleshooting
+- [Getting Started](#getting-started)
+- [Supported Code Block Languages](#supported-code-block-languages)
+- [Embedding the Editor on a Page](#embedding-the-editor-on-a-page)
+- [Configuration Options](#configuration-options)
+- [AI Assistant](#ai-assistant)
+- [Runtime API](#runtime-api)
+- [Events and Callback Usage](#events-and-callback-usage)
+- [Built-in Plugins and Features](#built-in-plugins-and-features)
+- [Extending Functionality (Custom Toolbar Buttons)](#extending-functionality-custom-toolbar-buttons)
+- [Versioned API Changes](#versioned-api-changes)
+- [Markdown Compatibility Notes](#markdown-compatibility-notes)
+- [Security Notes](#security-notes)
+- [License](#license)
+- [Development Commands](#development-commands)
+- [Troubleshooting](#troubleshooting)
 
 ## Getting Started
 
@@ -184,6 +185,13 @@ Importing the library registers the custom element as a side effect.
 | `busy.minVisible` | `number` | `180` | Minimum overlay visibility time (ms) once shown, to avoid flashing. |
 | `busy.texts.defaultLabel` | `string` | `'Working...'` | Default busy label used when task does not provide one. |
 | `busy.texts.cancel` | `string` | `'Cancel'` | Cancel button label in the loading overlay. |
+| `ai.enabled` | `boolean` | `false` | Enables the in-editor AI assistant panel and AI runtime API. |
+| `ai.language` | `string` | `'pl'` | Default language metadata sent in AI requests. |
+| `ai.provider` | `object` | `undefined` | Custom AI provider object implementing `send(request, opts)` and optional `isAvailable()`. When omitted, the editor uses the built-in Ollama provider. |
+| `ai.promptRegistry` | `PromptRegistry` | `undefined` | Optional prompt registry used by built-in providers to build mode-specific prompt plans. |
+| `ai.ollama.baseUrl` | `string` | `'http://localhost:11434'` | Base URL used by the built-in Ollama provider. |
+| `ai.ollama.model` | `string` | `'qwen2.5:7b'` | Model name used by the built-in Ollama provider. |
+| `ai.ollama.temperature` | `number` | `0.2` | Sampling temperature used by the built-in Ollama provider. |
 | `compatibility.enabled` | `boolean` | `false` | Enables publishing-compatibility validation and suggested fixes. |
 | `compatibility.showPanel` | `boolean` | `false` (auto `true` when enabled) | Shows built-in compatibility status panel above editor panes. |
 | `compatibility.debounce` | `number` | `500` | Validation debounce in milliseconds while typing. |
@@ -205,6 +213,226 @@ Importing the library registers the custom element as a side effect.
 | `onCompatibilityStatusChange` | `function` | `undefined` | Called with `(status, report)` on status transitions. |
 | `onCompatibilityFixApplied` | `function` | `undefined` | Called after user accepts compatibility fix proposal. |
 | `onBusyChange` | `function` | `undefined` | Called with busy overlay state `{ busy, count, label, detail, scope, locked, canCancel, cancelToken }`. |
+| `onAIResponse` | `function` | `undefined` | Called with `(result, request)` after a successful AI response. |
+| `onAIError` | `function` | `undefined` | Called with `(error, request)` when AI request fails. |
+
+## AI Assistant
+
+The package includes built-in AI providers, but you can also supply your own provider through configuration.
+
+### Minimal provider contract
+
+A custom provider can be any object with this shape:
+
+```js
+const customProvider = {
+  async isAvailable() {
+    return true;
+  },
+
+  async send(request, opts = {}) {
+    return {
+      text: 'Short assistant response',
+      suggestedMarkdown: '',
+    };
+  },
+};
+```
+
+`send(request, opts)` receives:
+
+```js
+{
+  mode: 'review-document' | 'improve-selection' | 'rewrite-selection' | 'chat',
+  markdown: 'full current document',
+  selection: {
+    from: 10,
+    to: 42,
+    text: 'selected text',
+    lineFrom: 3,
+    lineTo: 5,
+  },
+  instruction: 'User instruction from assistant panel',
+  language: 'pl',
+}
+```
+
+`send()` should resolve to:
+
+```js
+{
+  text: 'Human-readable assistant output',
+  suggestedMarkdown: 'Optional markdown suggestion',
+}
+```
+
+Notes:
+
+- `text` is always shown in the assistant panel.
+- `suggestedMarkdown` is optional, but when present it enables the "Apply Suggestion" flow.
+- For `improve-selection` and `rewrite-selection`, `suggestedMarkdown` should usually contain only the replacement for the selected fragment.
+- For `review-document`, `suggestedMarkdown` can be an empty string if you only want to return diagnostics.
+
+### PromptRegistry
+
+`PromptRegistry` centralizes mode-specific prompt templates. Built-in providers (`OllamaAIProvider`, `TokenAuthAIProvider`) can use one shared registry, so you can customize prompts in one place.
+
+```js
+import { PromptRegistry } from 'smart-md-editor';
+
+const promptRegistry = new PromptRegistry({
+  systemPrompt: 'You are an expert technical writing assistant for Markdown.',
+});
+
+promptRegistry.registerMode('improve-selection', {
+  wantsJson: true,
+  buildUserPrompt: (ctx) => [
+    `Requested mode: ${ctx.mode}`,
+    `Language: ${ctx.language}`,
+    '',
+    'Improve the selected fragment with a formal tone.',
+    'Return strict JSON with fields: text, suggestedMarkdown.',
+    '',
+    `Selection:\n${ctx.selectionText}`,
+    '',
+    `Instruction:\n${ctx.instruction || 'Improve style and clarity.'}`,
+  ].join('\n'),
+});
+```
+
+You can pass it via editor configuration:
+
+```js
+const editor = createEditor('#editor', {
+  ai: {
+    enabled: true,
+    promptRegistry,
+  },
+});
+```
+
+Or directly to built-in providers:
+
+```js
+import { OllamaAIProvider, TokenAuthAIProvider } from 'smart-md-editor';
+
+const ollamaProvider = new OllamaAIProvider({
+  baseUrl: 'http://localhost:11434',
+  model: 'qwen2.5:7b',
+  promptRegistry,
+});
+
+const tokenProvider = new TokenAuthAIProvider({
+  tokenUrl: 'https://auth.example.com/token',
+  sendUrl: 'https://api.example.com/chat',
+  promptRegistry,
+});
+```
+
+### Example: pass a custom provider in configuration
+
+```js
+import { createEditor } from 'smart-md-editor';
+
+class MyAIProvider {
+  async isAvailable() {
+    const response = await fetch('/api/ai/health');
+    return response.ok;
+  }
+
+  async send(request, opts = {}) {
+    const response = await fetch('/api/ai/assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: opts.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI request failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+}
+
+const editor = createEditor('#editor', {
+  ai: {
+    enabled: true,
+    language: 'en',
+    provider: new MyAIProvider(),
+  },
+});
+```
+
+### Example: replace provider at runtime
+
+```js
+import { OllamaAIProvider, TokenAuthAIProvider } from 'smart-md-editor';
+
+editor.setAIProvider(new OllamaAIProvider({
+  baseUrl: 'http://localhost:11434',
+  model: 'qwen2.5:7b',
+}));
+
+editor.setAIProvider(new TokenAuthAIProvider({
+  tokenUrl: 'https://auth.example.com/token',
+  sendUrl: 'https://api.example.com/chat',
+  tokenBody: {
+    client_id: 'demo-client',
+    client_secret: 'demo-secret',
+  },
+}));
+```
+
+### Built-in providers
+
+- `OllamaAIProvider`: local Ollama integration.
+- `TokenAuthAIProvider`: generic provider for backends that require fetching and refreshing an access token before inference requests.
+
+### `TokenAuthAIProvider` options
+
+```js
+import { TokenAuthAIProvider } from 'smart-md-editor';
+
+const provider = new TokenAuthAIProvider({
+  tokenUrl: 'https://auth.example.com/token',
+  sendUrl: 'https://api.example.com/chat',
+  tokenBody: {
+    client_id: 'demo-client',
+    client_secret: 'demo-secret',
+  },
+});
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `tokenUrl` | `string` | required | URL used to fetch an access token. |
+| `sendUrl` | `string` | required | URL used for the AI inference request. |
+| `tokenMethod` | `string` | `'POST'` | HTTP method used for the token request. |
+| `tokenHeaders` | `Record<string,string>` | `{}` | Extra headers added to the token request. |
+| `tokenBody` | `object \\| string \\| URLSearchParams \\| FormData` | `null` | Body sent to the token endpoint. Plain objects are serialized as JSON by default. |
+| `tokenField` | `string` | `'access_token'` | Response field containing the token value. |
+| `expiresInField` | `string` | `'expires_in'` | Response field containing token lifetime in seconds. |
+| `expiresAtField` | `string` | `'expires_at'` | Response field containing absolute token expiry (timestamp or parseable date). |
+| `refreshSkewMs` | `number` | `30000` | Token is refreshed before `send()` when expiry is closer than this threshold. |
+| `authHeaderName` | `string` | `'Authorization'` | Header name used to send the token to the AI endpoint. |
+| `authScheme` | `string` | `'Bearer'` | Prefix added before token value. Use empty string for raw token header. |
+| `sendMethod` | `string` | `'POST'` | HTTP method used for the AI inference request. |
+| `sendHeaders` | `Record<string,string>` | `{ Accept: 'application/json' }` | Extra headers added to the AI inference request. |
+| `model` | `string` | `'generic-model'` | Model id passed to the default payload builder. |
+| `temperature` | `number` | `0.2` | Temperature passed to the default payload builder. |
+| `systemPrompt` | `string` | built-in writing assistant prompt | System prompt used by the default payload builder. |
+| `buildSendPayload` | `(request, ctx) => object` | built-in implementation | Override payload construction for providers with a custom request format. |
+| `parseSendResponse` | `(data, request) => { text, suggestedMarkdown }` | built-in implementation | Override response parsing for providers with a custom response format. |
+| `parseTokenResponse` | `(data, ctx) => { token, expiresAtMs }` | built-in implementation | Override token parsing when your auth endpoint uses a non-standard response shape. |
+
+Behavior notes:
+
+- The provider caches the last token and refreshes it automatically before `send()` if it is expired or close to expiry.
+- If the inference request returns `401` or `403`, the provider refreshes the token once and retries the request once.
+- If `expires_at` is missing and `expires_in` is missing or invalid, the fallback token lifetime is 5 minutes.
+- The default `buildSendPayload` and `parseSendResponse` handle a generic chat-style backend; override them when your API uses a different wire format.
 
 ## Compatibility Quick Start (Eleventy)
 
@@ -340,6 +568,14 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `endBusyTask` | `(token) => void` | End a previously started busy task. |
 | `cancelBusyTask` | `(token?) => void` | Cancel one busy task by token, or all when omitted. |
 | `runWithBusy` | `(task, opts?) => Promise<any>` | Wrap an async task with loading overlay, lock, and optional cancellation signal. |
+| `isAIAssistantEnabled` | `() => boolean` | Returns whether the AI assistant feature is enabled for the editor instance. |
+| `isAIAssistantOpen` | `() => boolean` | Returns whether the AI assistant panel is currently open. |
+| `openAIAssistantPanel` | `() => boolean` | Open the AI assistant panel. |
+| `closeAIAssistantPanel` | `() => boolean` | Close the AI assistant panel. |
+| `toggleAIAssistantPanel` | `() => boolean` | Toggle the AI assistant panel and return its new open state. |
+| `setAIProvider` | `(provider) => void` | Replace the active AI provider at runtime. |
+| `getAIProvider` | `() => object \| null` | Read the current AI provider instance. |
+| `requestAIAssistant` | `(request) => Promise<{ mode, text, suggestedMarkdown }>` | Send an AI request programmatically using the active provider. |
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
 | `getToolbarConfig` | `() => object \| null` | Get the current declarative toolbar config, if one is active. |
@@ -388,6 +624,18 @@ await editor.runWithBusy(async ({ signal, update }) => {
   lock: true,
   cancellable: true,
 });
+```
+
+### Example: programmatic AI request
+
+```js
+const result = await editor.requestAIAssistant({
+  mode: 'improve-selection',
+  instruction: 'Make this paragraph shorter and clearer.',
+});
+
+console.log(result.text);
+console.log(result.suggestedMarkdown);
 ```
 
 ### Example: proposal apply modes
@@ -502,6 +750,8 @@ const editor = createEditor('#editor', {
 - `se-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
 - `se-preview-click`: `detail = { element, lineRange: { from, to } }`
 - `se-busy-change`: `detail = { busy, count, label, detail, scope, locked, canCancel, cancelToken }`
+- `se-ai-response`: `detail = { result, request }`
+- `se-ai-error`: `detail = { error, request }`
 
 ```js
 const el = document.querySelector('smart-editor');

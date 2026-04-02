@@ -16,6 +16,8 @@ import { EditorCore } from '../core/EditorCore.js';
  *   se-compatibility-status-change CustomEvent({ detail: { status, report } })
  *   se-compatibility-fix-applied   CustomEvent({ detail: payload })
  *   se-busy-change                 CustomEvent({ detail: busyState })
+ *   se-ai-response                 CustomEvent({ detail: { result, request } })
+ *   se-ai-error                    CustomEvent({ detail: { error, request } })
  *
  * All EditorCore public methods are proxied directly on the element.
  *
@@ -94,6 +96,23 @@ export class SmartEditorElement extends HTMLElement {
           detail: busyState,
         }));
       },
+
+      onAIResponse: (result, request) => {
+        this.dispatchEvent(new CustomEvent('se-ai-response', {
+          bubbles: true, composed: true,
+          detail: { result, request },
+        }));
+      },
+
+      onAIError: (error, request) => {
+        this.dispatchEvent(new CustomEvent('se-ai-error', {
+          bubbles: true, composed: true,
+          detail: {
+            error: error instanceof Error ? error.message : String(error),
+            request,
+          },
+        }));
+      },
     });
   }
 
@@ -146,6 +165,14 @@ export class SmartEditorElement extends HTMLElement {
   endBusyTask(token)        { return this._editor?.endBusyTask(token); }
   cancelBusyTask(token)     { return this._editor?.cancelBusyTask(token); }
   runWithBusy(task, opts)   { return this._editor?.runWithBusy(task, opts); }
+  isAIAssistantEnabled()    { return this._editor?.isAIAssistantEnabled(); }
+  isAIAssistantOpen()       { return this._editor?.isAIAssistantOpen(); }
+  openAIAssistantPanel()    { return this._editor?.openAIAssistantPanel(); }
+  closeAIAssistantPanel()   { return this._editor?.closeAIAssistantPanel(); }
+  toggleAIAssistantPanel()  { return this._editor?.toggleAIAssistantPanel(); }
+  setAIProvider(provider)   { return this._editor?.setAIProvider(provider); }
+  getAIProvider()           { return this._editor?.getAIProvider(); }
+  requestAIAssistant(request) { return this._editor?.requestAIAssistant(request); }
   destroy()                 { this._editor?.destroy(); this._editor = null; }
 }
 
