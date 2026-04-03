@@ -42,12 +42,45 @@ export function prependLines(api, prefix) {
   const newMarkdown = updated.join('\n');
   api.setMarkdown(newMarkdown, { preservePreviewScroll: true });
 
-  // Calculate cursor position: move it after the prefix on the first affected line
-  const firstAffectedLine = lines[from];
   let cursorOffset = 0;
   for (let i = 0; i < from; i++) {
-    cursorOffset += lines[i].length + 1; // +1 for newline
+    cursorOffset += lines[i].length + 1;
   }
-  cursorOffset += prefix.length; // position after prefix on the first line
+  cursorOffset += prefix.length;
+  api.setSelection(cursorOffset, cursorOffset);
+}
+
+/**
+ * Prefix selected lines as a sequential ordered list.
+ * Blank lines are preserved and do not increment numbering.
+ *
+ * @param {object} api
+ * @returns {void}
+ */
+export function prependOrderedLines(api) {
+  const sel = api.getSelection();
+  const md = api.getMarkdown();
+  const lines = md.split('\n');
+  const from = sel.lineFrom;
+  const to = sel.lineTo;
+  let nextNumber = 1;
+
+  const updated = lines.map((line, index) => {
+    if (index < from || index > to) return line;
+    if (!line.trim()) return line;
+
+    const prefix = `${nextNumber}. `;
+    nextNumber += 1;
+    return `${prefix}${line}`;
+  });
+
+  const newMarkdown = updated.join('\n');
+  api.setMarkdown(newMarkdown, { preservePreviewScroll: true });
+
+  let cursorOffset = 0;
+  for (let i = 0; i < from; i++) {
+    cursorOffset += lines[i].length + 1;
+  }
+  cursorOffset += 3;
   api.setSelection(cursorOffset, cursorOffset);
 }

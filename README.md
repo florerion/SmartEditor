@@ -200,7 +200,7 @@ Importing the library registers the custom element as a side effect.
 | `compatibility.plugins` | `Array` | `[]` | Extra markdown-it plugins for compatibility profile, e.g. `[[markdownItAnchor, opts]]`. |
 | `compatibility.disableRules` | `string[]` | `['emphasis']` | markdown-it rules disabled by the built-in Eleventy compatibility profile. |
 | `compatibility.profile` | `object` | Eleventy markdown-it profile | Custom profile implementing `render(markdown) => { html, tokens? }`. |
-| `compatibility.rules` | `Array` | built-in table rule | Validation/fix rules used by compatibility service. |
+| `compatibility.rules` | `Array` | built-in table/fence/list/link rules | Validation/fix rules used by compatibility service. |
 | `onChange` | `function` | `undefined` | Called with `(markdown, tokens, html)`. |
 | `onSelectionChange` | `function` | `undefined` | Called with current selection object. |
 | `onPaste` | `function` | `undefined` | Native paste event hook. |
@@ -1052,6 +1052,29 @@ The editor is designed to keep markdown output compatible with markdown-it based
 - Mermaid integration is represented as fenced blocks.
 - draw.io integration is represented as `![draw.io](image){xml}` lines.
 - Image resizing metadata is encoded in alt text using `|WxH` suffix.
+
+When `compatibility.enabled` is on, the built-in compatibility service validates markdown with table, fence, list, and link rules.
+
+Built-in issue families:
+
+- Table: missing edge pipes, invalid separator rows, separator alignment, column-count mismatch, empty header row, unescaped pipes in cells.
+- Fence: unclosed fences, mismatched delimiters, closing delimiters shorter than opening fences.
+- List: invalid indentation, mixed unordered markers at the same indent level, broken ordered sequences, invalid task markers.
+- Link: undefined references and empty inline destinations.
+
+Fix behavior:
+
+- `Fix` on a single issue uses that issue's own proposed markdown change.
+- `Fix all` applies safe fixes only.
+- Unsafe fixes remain available per issue, for example placeholder reference/destination fixes for links or synthetic header text for empty table headers.
+
+Behavior details worth knowing:
+
+- Fence openings may include info strings such as ` ```js `, but closing fences must contain only the delimiter and optional trailing spaces.
+- For `fence.unclosed`, the proposed closing delimiter is inserted after the first blank line following the opening fence, or at end-of-document if no blank line exists.
+- For `list.indentation-invalid`, allowed nesting steps are type-aware: ordered parents allow `4` spaces, unordered parents allow `2` spaces.
+- `list.mixed-marker-style` is checked only within the same indentation level; nested unordered lists may intentionally use different markers.
+- `[]()` reports both an undefined link text issue and a missing destination issue.
 
 ## draw.io Markdown Format
 

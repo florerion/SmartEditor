@@ -1,5 +1,8 @@
 import { createEleventyCompatibilityProfile } from './CompatibilityProfiles.js';
 import { TableCompatibilityRule } from './rules/TableCompatibilityRule.js';
+import { FenceCompatibilityRule } from './rules/FenceCompatibilityRule.js';
+import { ListCompatibilityRule } from './rules/ListCompatibilityRule.js';
+import { LinkCompatibilityRule } from './rules/LinkCompatibilityRule.js';
 
 /**
  * Validates markdown against a publishing compatibility profile.
@@ -14,7 +17,12 @@ export class CompatibilityService {
     this._profile = opts.profile ?? createEleventyCompatibilityProfile();
     this._rules = Array.isArray(opts.rules) && opts.rules.length
       ? opts.rules
-      : [new TableCompatibilityRule()];
+      : [
+          new TableCompatibilityRule(),
+          new FenceCompatibilityRule(),
+          new ListCompatibilityRule(),
+          new LinkCompatibilityRule(),
+        ];
   }
 
   /**
@@ -42,7 +50,8 @@ export class CompatibilityService {
       total: issues.length,
       errors: issues.filter((issue) => issue.severity === 'error').length,
       warnings: issues.filter((issue) => issue.severity === 'warning').length,
-      fixable: issues.filter((issue) => issue.fixable).length,
+      fixable: issues.filter((issue) => issue.fixable && (issue.fixSafety ?? 'safe') === 'safe').length,
+      fixableAll: issues.filter((issue) => issue.fixable).length,
     };
 
     const status = summary.errors > 0
@@ -75,7 +84,7 @@ export class CompatibilityService {
 
     this._rules.forEach((rule) => {
       if (typeof rule.buildDocumentFix !== 'function') return;
-      const result = rule.buildDocumentFix(nextMarkdown);
+      const result = rule.buildDocumentFix(nextMarkdown, { safeOnly: true });
       if (!result?.changed) return;
       nextMarkdown = result.nextMarkdown;
       changed = true;
