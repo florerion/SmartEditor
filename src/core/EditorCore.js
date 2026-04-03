@@ -1403,15 +1403,15 @@ export class EditorCore {
     this._aiPanel = new AIAssistantPanel(this._aiPanelEl, {
       onSubmit: async (payload) => {
         this._aiPanel?.setBusy(true);
-        this._aiPanel?.setStatus('Wysyłam zapytanie do modelu...');
+        this._aiPanel?.setStatus('Sending request to AI model...');
 
         try {
           const result = await this.requestAIAssistant(payload);
           this._aiPanel?.setResult(result);
-          this._aiPanel?.setStatus('Gotowe.');
+          this._aiPanel?.setStatus('Done.');
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this._aiPanel?.setStatus(`Błąd: ${message}`);
+          this._aiPanel?.setStatus(`Error: ${message}`);
           this.flashError(message);
         } finally {
           this._aiPanel?.setBusy(false);
@@ -1438,13 +1438,13 @@ export class EditorCore {
   async _refreshAIProviderAvailability() {
     if (!this._aiPanel || !this._aiService) return;
 
-    this._aiPanel.setStatus('Sprawdzam połączenie z providerem AI...');
+    this._aiPanel.setStatus('Checking AI provider availability...');
 
     const available = await this._aiService.isAvailable();
     this._aiPanel.setStatus(
       available
-        ? 'Provider AI jest dostępny.'
-        : 'Provider AI jest niedostępny. Sprawdź lokalny serwer modelu.',
+        ? 'AI provider is available.'
+        : 'AI provider is unavailable. Check the local model server.',
     );
   }
 
