@@ -1,4 +1,4 @@
-import { prependLines } from './utils.js';
+import { prependLines, prependOrderedLines } from './utils.js';
 
 /** @type {object[]} */
 export const listActions = [
@@ -16,7 +16,7 @@ export const listActions = [
     group: 'list',
     order: 31,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><text x="1" y="8" font-size="6" fill="currentColor" stroke="none">1.</text><text x="1" y="14" font-size="6" fill="currentColor" stroke="none">2.</text><text x="1" y="20" font-size="6" fill="currentColor" stroke="none">3.</text></svg>`,
-    run: (api) => prependLines(api, '1. '),
+    run: (api) => prependOrderedLines(api),
   },
   {
     id: 'task-list',

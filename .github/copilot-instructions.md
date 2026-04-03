@@ -91,17 +91,36 @@
 
 ## Compatibility MVP
 - Default compatibility profile is Eleventy-like (`createEleventyCompatibilityProfile`) and supports markdown-it options, disabled rules, and plugin injection.
+- Default compatibility rules now include table, fence, list, and link validators (`TableCompatibilityRule`, `FenceCompatibilityRule`, `ListCompatibilityRule`, `LinkCompatibilityRule`).
 - Keep table compatibility issue codes stable:
 	- `table.missing-leading-pipe`
 	- `table.missing-trailing-pipe`
 	- `table.column-count-mismatch`
 	- `table.invalid-separator-row`
+	- `table.separator-alignment-invalid`
+	- `table.empty-header-row`
+	- `table.unescaped-pipe-in-cell`
+- Keep additional compatibility issue codes stable:
+	- fence: `fence.unclosed`, `fence.mismatched-delimiter`, `fence.length-too-short-to-close`
+	- list: `list.indentation-invalid`, `list.mixed-marker-style`, `list.ordered-sequence-broken`, `list.task-marker-invalid`
+	- link: `link.reference-undefined`, `link.destination-missing`
+- Fence-rule behavior to preserve:
+	- opening fences may include info strings (e.g., ```` ```js ````);
+	- closing fences must be delimiter-only (plus optional trailing spaces);
+	- `fence.unclosed` fix inserts a closing delimiter after the first blank line following the opening fence (fallback: end-of-document);
+	- `fence.mismatched-delimiter` fix normalizes to opening marker and opening length (do not expand to a longer closing delimiter unless opening was longer).
+- List-rule behavior to preserve:
+	- `list.indentation-invalid` must flag tab indentation, odd-space indentation, and indent level jumps;
+	- allowed nesting step is type-aware: ordered parent = 4 spaces, unordered parent = 2 spaces.
+	- `list.mixed-marker-style` applies only within the same indent level (different nested levels may use different unordered markers).
+- Link-rule behavior to preserve:
+	- `[]()` should report both `link.reference-undefined` (empty label) and `link.destination-missing` (empty destination).
 - Keep compatibility issue panel behavior stable:
 	- list is scrollable (viewport around three items visible),
 	- issue text click jumps to source line/selection,
 	- fix actions remain mediated by propose/diff acceptance flow,
 	- per-issue `Fix` applies only the selected issue (must not normalize the whole table/block),
-	- `Fix all` applies batch normalization across all fixable issues.
+	- `Fix all` applies batch normalization across safe fixes only (unsafe fixes remain per-issue).
 
 ## Scroll Sync
 - Split-mode bidirectional vertical scroll sync is implemented in `EditorCore` (`_handleCodePanelScroll`, `_handlePreviewPanelScroll`).

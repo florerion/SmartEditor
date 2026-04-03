@@ -26,7 +26,7 @@ export class TableCompatibilityRule {
         issues.push({
           id: `${this.id}-${index + 1}-${problemIndex + 1}`,
           code: problem.code,
-          severity: 'error',
+          severity: problem.severity ?? 'error',
           message: problem.message,
           details: problem.details,
           lineFrom: problem.lineFrom,
@@ -34,6 +34,7 @@ export class TableCompatibilityRule {
           from: lineRange.from,
           to: lineRange.to,
           fixable: true,
+          fixSafety: problem.fixSafety ?? 'safe',
           fix: {
             id: `fix-${this.id}-${index + 1}-${problemIndex + 1}`,
             label: 'Fix issue',
@@ -51,9 +52,10 @@ export class TableCompatibilityRule {
 
   /**
    * @param {string} markdown
+   * @param {{ safeOnly?: boolean }} [opts]
    * @returns {{ changed: boolean, nextMarkdown: string, changes: object[] }}
    */
-  buildDocumentFix(markdown) {
+  buildDocumentFix(markdown, opts = {}) {
     const lines = String(markdown ?? '').split('\n');
     const blocks = _collectTableBlocks(lines);
     if (!blocks.length) {
@@ -65,7 +67,13 @@ export class TableCompatibilityRule {
     let shift = 0;
 
     blocks.forEach((block, index) => {
-      if (_isCanonicalBlock(block)) return;
+      const blockProblems = _collectBlockProblems(block);
+      if (!blockProblems.length) return;
+
+      if (opts.safeOnly === true) {
+        const hasSafeProblem = blockProblems.some((problem) => (problem.fixSafety ?? 'safe') === 'safe');
+        if (!hasSafeProblem) return;
+      }
 
       const normalizedLines = _normalizeBlock(block);
       const start = block.startLine + shift;
@@ -101,7 +109,7 @@ function _collectBlockProblems(block) {
     rowIndex: idx,
   }));
 
-  const expectedColumns = Math.max(...parsedRows.map((row) => row.cells.length));
+  const expectedColumns = _inferExpectedColumns(parsedRows);
   const problems = [];
 
   parsedRows.forEach((row) => {
@@ -140,6 +148,40 @@ function _collectBlockProblems(block) {
         code: 'table.invalid-separator-row',
         message: 'Table separator row uses invalid markdown syntax.',
         details: `Row ${row.line + 1} should use separator cells like '---', ':---', '---:', or ':---:'.`,
+        lineFrom: row.line,
+        lineTo: row.line,
+      });
+
+      if (_looksLikeSeparatorAlignmentIssue(row.cells)) {
+        problems.push({
+          code: 'table.separator-alignment-invalid',
+          severity: 'error',
+          message: 'Table separator row uses invalid alignment markers.',
+          details: `Row ${row.line + 1} has malformed alignment. Use only ':---', '---:', ':---:' or '---'.`,
+          lineFrom: row.line,
+          lineTo: row.line,
+        });
+      }
+    }
+
+    if (row.rowIndex === 0 && row.cells.every((cell) => cell.trim().length === 0)) {
+      problems.push({
+        code: 'table.empty-header-row',
+        severity: 'warning',
+        message: 'Table header row is empty.',
+        details: `Row ${row.line + 1} should contain at least one non-empty header cell.`,
+        lineFrom: row.line,
+        lineTo: row.line,
+        fixSafety: 'unsafe',
+      });
+    }
+
+    if (row.rowIndex > 1 && _hasExtraUnescapedCellPipes(row.raw, expectedColumns)) {
+      problems.push({
+        code: 'table.unescaped-pipe-in-cell',
+        severity: 'error',
+        message: 'Table cell likely contains an unescaped pipe character.',
+        details: `Row ${row.line + 1} may contain a literal '|' that should be escaped as '\\|'.`,
         lineFrom: row.line,
         lineTo: row.line,
       });
@@ -193,15 +235,15 @@ function _looksLikeBodyRow(line) {
   return trimmed.includes('|');
 }
 
-function _isCanonicalBlock(block) {
-  return _collectBlockProblems(block).length === 0;
-}
-
 function _normalizeBlock(block) {
   const parsedRows = block.lines.map((line) => _parseRow(line));
-  const expectedColumns = Math.max(...parsedRows.map((row) => row.cells.length));
+  const expectedColumns = _inferExpectedColumns(parsedRows);
 
   return parsedRows.map((row, idx) => {
+    if (idx > 1 && _hasExtraUnescapedCellPipes(row.raw, expectedColumns)) {
+      return _fixLineForProblem(row.raw, 'table.unescaped-pipe-in-cell', expectedColumns);
+    }
+
     const padded = _padCells(row.cells, expectedColumns);
     if (idx === 1) {
       const sepCells = padded.map((cell) => _normalizeSeparatorCell(cell));
@@ -216,7 +258,7 @@ function _buildSingleProblemFix(lines, block, problem) {
   const nextLines = [...lines];
   const rowIndex = problem.lineFrom - block.startLine;
   const blockRows = block.lines.map((line) => _parseRow(line));
-  const expectedColumns = Math.max(...blockRows.map((row) => row.cells.length));
+  const expectedColumns = _inferExpectedColumns(blockRows);
   const targetLine = block.lines[rowIndex];
 
   if (typeof targetLine !== 'string') {
@@ -262,8 +304,28 @@ function _fixLineForProblem(line, code, expectedColumns) {
     return `| ${sepCells.join(' | ')} |`;
   }
 
+  if (code === 'table.separator-alignment-invalid') {
+    const sepCells = padded.map((cell) => _normalizeSeparatorCell(cell));
+    return `| ${sepCells.join(' | ')} |`;
+  }
+
   if (code === 'table.column-count-mismatch') {
     return `| ${padded.map((cell) => cell.trim()).join(' | ')} |`;
+  }
+
+  if (code === 'table.empty-header-row') {
+    const headerCells = padded.map((cell, idx) => {
+      const trimmed = cell.trim();
+      return trimmed || `Column ${idx + 1}`;
+    });
+    return `| ${headerCells.join(' | ')} |`;
+  }
+
+  if (code === 'table.unescaped-pipe-in-cell') {
+    const escaped = _escapeExtraUnescapedCellPipes(line, expectedColumns);
+    const parsedEscaped = _parseRow(escaped);
+    const normalizedCells = _padCells(parsedEscaped.cells, expectedColumns).slice(0, expectedColumns);
+    return `| ${normalizedCells.map((cell) => cell.trim()).join(' | ')} |`;
   }
 
   return line;
@@ -279,9 +341,10 @@ function _parseRow(line) {
     .replace(/^\|/, '')
     .replace(/\|$/, '');
 
-  const cells = core.split('|').map((cell) => cell.trim());
+  const cells = _splitUnescapedPipes(core).map((cell) => cell.trim());
 
   return {
+    raw,
     hasLeadingPipe,
     hasTrailingPipe,
     cells,
@@ -297,6 +360,126 @@ function _normalizeSeparatorCell(cell) {
   const left = compact.startsWith(':');
   const right = compact.endsWith(':');
   return `${left ? ':' : ''}---${right ? ':' : ''}`;
+}
+
+function _looksLikeSeparatorAlignmentIssue(cells) {
+  return cells.some((cell) => {
+    const compact = String(cell ?? '').replace(/\s+/g, '');
+    if (!compact.includes('-')) return true;
+    if (/^:?-{3,}:?$/.test(compact)) return false;
+    return /^[:\-]+$/.test(compact);
+  });
+}
+
+function _inferExpectedColumns(rows) {
+  const headerColumns = rows[0]?.cells.length ?? 0;
+  const separatorColumns = rows[1]?.cells.length ?? headerColumns;
+  return Math.max(headerColumns, separatorColumns, 1);
+}
+
+function _hasExtraUnescapedCellPipes(rawLine, expectedColumns) {
+  const core = _trimOuterPipes(String(rawLine ?? '').trim());
+  return _findUnescapedPipePositions(core).length > Math.max(expectedColumns - 1, 0);
+}
+
+function _escapeExtraUnescapedCellPipes(rawLine, expectedColumns) {
+  const trimmed = String(rawLine ?? '').trim();
+  const hasLeadingPipe = trimmed.startsWith('|');
+  const hasTrailingPipe = trimmed.endsWith('|');
+  const core = _trimOuterPipes(trimmed);
+  const separatorCount = Math.max(expectedColumns - 1, 0);
+  const extraPositions = new Set(_findUnescapedPipePositions(core).slice(separatorCount));
+
+  if (!extraPositions.size) return trimmed;
+
+  let nextCore = '';
+  let escaped = false;
+
+  for (let i = 0; i < core.length; i += 1) {
+    const char = core[i];
+
+    if (escaped) {
+      nextCore += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      nextCore += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '|' && extraPositions.has(i)) {
+      nextCore += '\\|';
+      continue;
+    }
+
+    nextCore += char;
+  }
+
+  return `${hasLeadingPipe ? '|' : ''}${nextCore}${hasTrailingPipe ? '|' : ''}`;
+}
+
+function _trimOuterPipes(text) {
+  return String(text ?? '').replace(/^\|/, '').replace(/\|$/, '');
+}
+
+function _findUnescapedPipePositions(text) {
+  const positions = [];
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '|') {
+      positions.push(i);
+    }
+  }
+
+  return positions;
+}
+
+function _splitUnescapedPipes(text) {
+  const parts = [];
+  let current = '';
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      current += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '|') {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  parts.push(current);
+  return parts;
 }
 
 function _padCells(cells, count) {
