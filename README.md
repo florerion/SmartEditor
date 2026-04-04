@@ -314,7 +314,7 @@ const editor = createEditor('#editor', {
 Or directly to built-in providers:
 
 ```js
-import { OllamaAIProvider, TokenAuthAIProvider } from 'smart-md-editor';
+import { OllamaAIProvider, TokenAuthAIProvider, OpenAICompatibleAIProvider } from 'smart-md-editor';
 
 const ollamaProvider = new OllamaAIProvider({
   baseUrl: 'http://localhost:11434',
@@ -325,6 +325,12 @@ const ollamaProvider = new OllamaAIProvider({
 const tokenProvider = new TokenAuthAIProvider({
   tokenUrl: 'https://auth.example.com/token',
   sendUrl: 'https://api.example.com/chat',
+  promptRegistry,
+});
+
+const openaiProvider = new OpenAICompatibleAIProvider({
+  apiKey: 'sk-...',
+  model: 'gpt-4o',
   promptRegistry,
 });
 ```
@@ -368,7 +374,7 @@ const editor = createEditor('#editor', {
 ### Example: replace provider at runtime
 
 ```js
-import { OllamaAIProvider, TokenAuthAIProvider } from 'smart-md-editor';
+import { OllamaAIProvider, TokenAuthAIProvider, OpenAICompatibleAIProvider } from 'smart-md-editor';
 
 editor.setAIProvider(new OllamaAIProvider({
   baseUrl: 'http://localhost:11434',
@@ -383,12 +389,18 @@ editor.setAIProvider(new TokenAuthAIProvider({
     client_secret: 'demo-secret',
   },
 }));
+
+editor.setAIProvider(new OpenAICompatibleAIProvider({
+  apiKey: 'sk-...',
+  model: 'gpt-4o',
+}));
 ```
 
 ### Built-in providers
 
 - `OllamaAIProvider`: local Ollama integration.
 - `TokenAuthAIProvider`: generic provider for backends that require fetching and refreshing an access token before inference requests.
+- `OpenAICompatibleAIProvider`: OpenAI API and compatible services (Azure OpenAI, Ollama endpoint, etc.).
 
 ### `TokenAuthAIProvider` options
 
@@ -433,6 +445,36 @@ Behavior notes:
 - If the inference request returns `401` or `403`, the provider refreshes the token once and retries the request once.
 - If `expires_at` is missing and `expires_in` is missing or invalid, the fallback token lifetime is 5 minutes.
 - The default `buildSendPayload` and `parseSendResponse` handle a generic chat-style backend; override them when your API uses a different wire format.
+
+### `OpenAICompatibleAIProvider` options
+
+```js
+import { OpenAICompatibleAIProvider } from 'smart-md-editor';
+
+const provider = new OpenAICompatibleAIProvider({
+  apiKey: 'sk-...', // Your OpenAI API key
+  apiUrl: 'https://api.openai.com/v1/chat/completions', // Optional
+  model: 'gpt-4o', // Optional
+  temperature: 0.2, // Optional
+});
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `apiKey` | `string` | required | OpenAI API key for authentication. |
+| `apiUrl` | `string` | `'https://api.openai.com/v1/chat/completions'` | Endpoint URL. Works with OpenAI, Azure OpenAI, Ollama OpenAI endpoint, or any API with compatible interface. |
+| `model` | `string` | `'gpt-4o'` | Model identifier sent to the API. |
+| `temperature` | `number` | `0.2` | Sampling temperature (0–2). |
+| `systemPrompt` | `string` | built-in writing assistant prompt | System prompt used by default PromptRegistry. |
+| `promptRegistry` | `PromptRegistry` | default | Custom prompt registry for request templates. |
+| `extraHeaders` | `Record<string,string>` | `{}` | Additional HTTP headers sent with every request. |
+
+Behavior notes:
+
+- Sends requests in OpenAI-compatible format: `{ model, messages, temperature, response_format (if JSON requested) }`.
+- Expects responses in OpenAI format: `{ choices[0].message.content }`.
+- Compatible with OpenAI, Azure OpenAI Embeddings, Ollama `/api/chat` endpoint (via OpenAI wrapper), and other OpenAI-compatible APIs.
+- Automatically adds `Bearer` authorization header with the provided API key.
 
 ## Compatibility Quick Start (Eleventy)
 
