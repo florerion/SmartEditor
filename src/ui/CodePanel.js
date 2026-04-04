@@ -714,6 +714,21 @@ export class CodePanel {
   }
 
   /**
+   * Reveal a document position without overwriting the current selection.
+   * @param {number} position
+   * @param {object} [opts]
+   * @param {'start'|'center'|'end'|'nearest'} [opts.y='center']
+   */
+  revealPosition(position, opts = {}) {
+    const docLength = this._view.state.doc.length;
+    const target = Math.max(0, Math.min(Number(position) || 0, docLength));
+    this._view.dispatch({
+      effects: EditorView.scrollIntoView(target, { y: opts.y ?? 'center' }),
+    });
+    this._view.focus();
+  }
+
+  /**
    * Scroll to and select a 0-based line.
    * @param {number} line
    */

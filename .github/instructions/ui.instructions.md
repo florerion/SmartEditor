@@ -26,6 +26,9 @@ applyTo: "src/ui/**"
 - Preserve preview image selection affordance class (`.se-preview-image-selected`) used by core keyboard-delete flow.
 - In `PreviewPanel`, keep click payload data enriched with `viewportRatio` for ratio-aware preview->code navigation.
 - For `DiffModal` used by `proposeChange`, preserve full-document comparison with explicit highlight ranges for replaced/inserted content and cursor marker rendering for insert mode previews.
+- Preserve `DiffModal` reading ergonomics:
+	- keep before/after panes scroll-synced (vertical + horizontal ratio sync),
+	- on open, auto-scroll panes to first highlighted change so the initial context is visible around viewport center.
 - In diff preview styles, keep non-changed column background neutral; reserve red/green emphasis for highlighted changed fragments only.
 - For `CompatibilityPanel`, preserve UX contracts:
 	- issue list is scrollable with a viewport around three visible rows,

@@ -26,6 +26,9 @@ applyTo: "src/core/**"
 	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,
 	- insert mode uses `selection.to`.
+- Preserve `proposeChange(...).accept` viewport semantics:
+	- after accept, code caret should move to the end of inserted/replaced chunk and code viewport should reveal the last added line,
+	- keep preview stable during apply flow (no preview jump) by using `setMarkdown(..., { preservePreviewScroll: true })` for `replace-all` and preview stability lock for selection/cursor edits.
 - For `replace-all` propose previews, compute and highlight only the true changed span (trim shared prefix/suffix); avoid reverting to full-document highlight.
 - Keep compatibility orchestration in `EditorCore` aligned with `CompatibilityService` contract (`validate`, `buildBatchFix`, profile switching).
 - Preserve compatibility fix intent:
