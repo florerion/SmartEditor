@@ -20,7 +20,6 @@ This document is for developers integrating the editor into their own applicatio
 - [Events and Callback Usage](#events-and-callback-usage)
 - [Built-in Plugins and Features](#built-in-plugins-and-features)
 - [Extending Functionality (Custom Toolbar Buttons)](#extending-functionality-custom-toolbar-buttons)
-- [Versioned API Changes](#versioned-api-changes)
 - [Markdown Compatibility Notes](#markdown-compatibility-notes)
 - [Security Notes](#security-notes)
 - [License](#license)
@@ -1201,35 +1200,6 @@ createEditor(element, {
 ## License
 
 This project is licensed under the MIT License. See `LICENSE` for details.
-
-## Versioned API Changes
-
-Use this section as a compatibility reference when upgrading the editor in host applications.
-
-### `0.1.0`
-
-- Initial public integration surface:
-  - Factory: `createEditor(element, options)`
-  - Exports: `EditorCore`, `SmartEditorElement`
-  - Web Component registration: `<smart-editor>`
-- Runtime API includes document ops, selection ops, mode switching, action registration, draw.io modal, and diff-based `proposeChange`.
-- Core options include markdown-it configuration, upload configuration, draw.io URL override, and integration callbacks.
-- Built-in action groups include inline formatting, blocks, lists, links/images, table/mermaid/draw.io, and image upload.
-- Parser support includes source-line mapping, table cell metadata, Mermaid/KaTeX placeholders, draw.io image+xml blocks, and image dimension syntax (`|WxH`).
-
-### Upgrade Notes
-
-- Treat any removal or signature change in methods listed under `Runtime API` as breaking.
-- Treat callback signature changes in `Configuration Options` as breaking.
-- Treat changes to markdown serialization conventions (`draw.io` image+xml block, image `|WxH`) as breaking for downstream pipelines.
-- Prefer additive changes for custom action integrations: add new action IDs instead of mutating existing IDs used by host automation.
-
-### `0.2.0`
-
-- Added declarative `toolbar` config for explicit grouping, ordering, display mode selection, and dropdown menus.
-- Added runtime toolbar methods: `getToolbarConfig()` and `setToolbarConfig(config)`.
-- Toolbar items now support inline async `run(api, state, args?)` handlers in addition to references to registered actions.
-- Added runtime toolbar helper methods for granular updates (`updateToolbarConfig`, `upsert/remove` for groups/items/dropdown items).
 
 ## Development Commands
 
