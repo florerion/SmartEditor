@@ -12,12 +12,15 @@ describe('EditorCore proposeChange and preview image delete', () => {
   it('replace-selection falls back to insert-at-cursor when selection is empty', async () => {
     const editor = createEditor('hello');
     const openSpy = vi.spyOn(editor._diffModal, 'open').mockResolvedValue(true);
+    const revealSpy = vi.spyOn(editor._codePanel, 'revealPosition');
 
     editor.setSelection(5, 5);
     const applied = await editor.proposeChange('!', { mode: 'replace-selection' });
 
     expect(applied).toBe(true);
     expect(editor.getMarkdown()).toBe('hello!');
+    expect(editor.getSelection()).toMatchObject({ from: 6, to: 6 });
+    expect(revealSpy).toHaveBeenCalledWith(5, { y: 'center' });
     expect(openSpy).toHaveBeenCalledTimes(1);
     const opts = openSpy.mock.calls[0][2];
     expect(opts.title).toContain('insert-at-cursor');
@@ -36,6 +39,41 @@ describe('EditorCore proposeChange and preview image delete', () => {
     const opts = openSpy.mock.calls[0][2];
     expect(opts.oldHighlight).toEqual({ from: 2, to: 3 });
     expect(opts.newHighlight).toEqual({ from: 2, to: 3 });
+
+    editor.destroy();
+  });
+
+  it('replace-all moves selection to the end of the accepted change and reveals the last added line', async () => {
+    const editor = createEditor('before');
+    const revealSpy = vi.spyOn(editor._codePanel, 'revealPosition');
+    const setMarkdownSpy = vi.spyOn(editor, 'setMarkdown');
+
+    vi.spyOn(editor._diffModal, 'open').mockResolvedValue(true);
+
+    const applied = await editor.proposeChange('before\nline 1\nline 2\n', { mode: 'replace-all' });
+
+    expect(applied).toBe(true);
+    expect(editor.getMarkdown()).toBe('before\nline 1\nline 2\n');
+    expect(setMarkdownSpy).toHaveBeenCalledWith('before\nline 1\nline 2\n', { preservePreviewScroll: true });
+    expect(editor.getSelection()).toMatchObject({ from: 21, to: 21, lineFrom: 3, lineTo: 3 });
+    expect(revealSpy).toHaveBeenCalledWith(20, { y: 'center' });
+
+    editor.destroy();
+  });
+
+  it('replace-selection reveals the last added line after accepting a multiline change', async () => {
+    const editor = createEditor('alpha\nbeta\ngamma');
+    const revealSpy = vi.spyOn(editor._codePanel, 'revealPosition');
+
+    vi.spyOn(editor._diffModal, 'open').mockResolvedValue(true);
+
+    editor.setSelection(6, 10);
+    const applied = await editor.proposeChange('BETA\nOMEGA\n', { mode: 'replace-selection' });
+
+    expect(applied).toBe(true);
+    expect(editor.getMarkdown()).toBe('alpha\nBETA\nOMEGA\n\ngamma');
+    expect(editor.getSelection()).toMatchObject({ from: 17, to: 17, lineFrom: 3, lineTo: 3 });
+    expect(revealSpy).toHaveBeenCalledWith(16, { y: 'center' });
 
     editor.destroy();
   });

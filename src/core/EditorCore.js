@@ -865,13 +865,32 @@ export class EditorCore {
     });
 
     if (accepted) {
+      const targetSelection = this._buildProposedSelection(candidate.newHighlight);
       if (mode === 'replace-all') {
-        this.setMarkdown(newMarkdown);
+        this.setMarkdown(newMarkdown, { preservePreviewScroll: true });
+        this.setSelection(targetSelection.anchor, targetSelection.anchor);
+        this._codePanel.revealPosition(targetSelection.reveal, { y: 'center' });
       } else if (mode === 'replace-selection') {
-        this.setSelection(selection.from, selection.to);
-        this.replaceSelection(newMarkdown);
+        const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+        this._beginPreviewStabilityLock(previewScrollTop);
+        try {
+          this.setSelection(selection.from, selection.to);
+          this.replaceSelection(newMarkdown);
+          this.setSelection(targetSelection.anchor, targetSelection.anchor);
+          this._codePanel.revealPosition(targetSelection.reveal, { y: 'center' });
+        } finally {
+          this._schedulePreviewStabilityUnlock(220);
+        }
       } else {
-        this.insertText(newMarkdown, selection.to);
+        const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+        this._beginPreviewStabilityLock(previewScrollTop);
+        try {
+          this.insertText(newMarkdown, selection.to);
+          this.setSelection(targetSelection.anchor, targetSelection.anchor);
+          this._codePanel.revealPosition(targetSelection.reveal, { y: 'center' });
+        } finally {
+          this._schedulePreviewStabilityUnlock(220);
+        }
       }
       return true;
     }
@@ -1037,6 +1056,18 @@ export class EditorCore {
       oldHighlight: { from: insertAt, to: insertAt, cursor: true },
       newHighlight: { from: insertAt, to: insertAt + nextChunk.length },
     };
+  }
+
+  /**
+   * @param {{ from:number, to:number }} highlight
+   * @returns {{ anchor:number, reveal:number }}
+   */
+  _buildProposedSelection(highlight) {
+    const from = Number.isInteger(highlight?.from) ? highlight.from : 0;
+    const to = Number.isInteger(highlight?.to) ? highlight.to : from;
+    const anchor = Math.max(0, to);
+    const reveal = to > from ? Math.max(from, to - 1) : anchor;
+    return { anchor, reveal };
   }
 
   /** Detach editor and clean up resources. */

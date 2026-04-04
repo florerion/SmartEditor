@@ -1457,6 +1457,14 @@ ${buildEditorThemeStyles()}
   outline: 1px solid var(--se-color-success-outline, rgba(22, 163, 74, 0.4));
 }
 
+.se-diff__anchor {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: text-bottom;
+  overflow: hidden;
+}
+
 .se-diff__cursor {
   display: inline-block;
   width: 2px;
