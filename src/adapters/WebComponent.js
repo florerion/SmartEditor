@@ -10,6 +10,7 @@ import { EditorCore } from '../core/EditorCore.js';
  *
  * DOM Events emitted:
  *   se-change           CustomEvent({ detail: { markdown, tokens, html } })
+ *                       Emitted after debounced preview rendering completes.
  *   se-selection-change CustomEvent({ detail: selInfo })
  *   se-preview-click    CustomEvent({ detail: { element, lineRange } })
  *   se-compatibility-report        CustomEvent({ detail: report })
@@ -48,11 +49,15 @@ export class SmartEditorElement extends HTMLElement {
       mode:  this.getAttribute('mode')  ?? 'split',
       theme: this.getAttribute('theme') ?? 'auto',
 
-      onChange: (markdown, tokens, html) => {
-        this.dispatchEvent(new CustomEvent('se-change', {
-          bubbles: true, composed: true,
-          detail: { markdown, tokens, html },
-        }));
+      onPreviewRendered: (markdown, tokens, html) => {
+        // Emit CustomEvent asynchronously to batch updates and reduce CPU load during rapid typing.
+        // Event fires in next microtask, which allows multiple rapid renders to batch together.
+        queueMicrotask(() => {
+          this.dispatchEvent(new CustomEvent('se-change', {
+            bubbles: true, composed: true,
+            detail: { markdown, tokens, html },
+          }));
+        });
       },
 
       onSelectionChange: (selInfo) => {

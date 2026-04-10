@@ -96,7 +96,8 @@ export class EditorCore {
   * @param {string[]}    [opts.compatibility.disableRules] markdown-it rules disabled in compatibility profile
   * @param {object}      [opts.compatibility.profile] Compatibility profile with render(markdown) method
   * @param {Array}       [opts.compatibility.rules] Validation/fix rule instances
-   * @param {Function}    [opts.onChange]           (markdown, tokens, html) => void
+   * @param {Function}    [opts.onChange]           (markdown) => void
+   * @param {Function}    [opts.onPreviewRendered]  (markdown, tokens, html) => void
    * @param {Function}    [opts.onSelectionChange]  (selInfo) => void
    * @param {Function}    [opts.onPaste]            (clipboardEvent) => void
    * @param {Function}    [opts.onUploadStart]      (file) => void
@@ -141,6 +142,7 @@ export class EditorCore {
     this._previewRenderCycleId = 0;
     this._previewPinDeadline = 0;
     this._selectedPreviewImageEl = null;
+    this._previewBlockCache = null;
     this._theme = 'auto';
     this._compatibilityEnabled = opts.compatibility?.enabled === true;
     this._compatibilityDebounceMs = Number.isFinite(opts.compatibility?.debounce)
@@ -211,7 +213,9 @@ export class EditorCore {
   // ============================================================
 
   /** @returns {string} */
-  getMarkdown() { return this._state.value; }
+  getMarkdown() {
+    return this._codePanel ? this._codePanel.getValue() : this._state.value;
+  }
 
   /**
    * Replace the entire document.
@@ -1155,15 +1159,9 @@ export class EditorCore {
     this._codePanel = new CodePanel(this._codePanelEl, {
       value: this._state.value,
 
-      onChange: (value) => {
-        this._state.setValue(value);
-        this._schedulePreviewUpdate(value);
+      onChange: () => {
+        this._schedulePreviewUpdate();
         this._suppressScrollSyncTemporarily();
-        this._bus.emit('change', value);
-        if (this._opts.onChange) {
-          const { tokens, html } = this._parser.render(value);
-          this._opts.onChange(value, tokens, html);
-        }
         this._scheduleCompatibilityValidation();
         this._updateHintContextFromSelection(this._codePanel.getSelection());
       },
@@ -1552,9 +1550,42 @@ export class EditorCore {
   // Private — rendering
   // ============================================================
 
-  _schedulePreviewUpdate(value) {
+  /**
+   * Calculate adaptive debounce delay based on document size.
+   * When incremental block cache is warm, use a low debounce to improve typing latency.
+   * Otherwise larger documents get longer debounce to improve responsiveness.
+   * - warm incremental cache: 80ms
+   * - <1MB: 150ms
+   * - 1-3MB: 300ms
+   * - 3-5MB: 500ms
+   * - 5MB+: 800ms
+   * @returns {number} Debounce delay in milliseconds
+   */
+  _calculateAdaptiveDebounceDelay() {
+    try {
+      const markdown = this._codePanel.getValue();
+      if (this._previewBlockCache !== null) return 80;
+      const sizeBytes = new Blob([markdown]).size;
+      const sizeMB = sizeBytes / (1024 * 1024);
+
+      if (sizeMB < 1) return 150;
+      if (sizeMB < 3) return 300;
+      if (sizeMB < 5) return 500;
+      return 800;
+    } catch (err) {
+      // Fallback to safe default on any error
+      return 150;
+    }
+  }
+
+  _schedulePreviewUpdate() {
     clearTimeout(this._previewDebounce);
+    const delay = this._calculateAdaptiveDebounceDelay();
     this._previewDebounce = setTimeout(() => {
+      const value = this._codePanel.getValue();
+      this._state.setValue(value);
+      this._bus.emit('change', value);
+      this._opts.onChange?.(value);
       const previewScrollTop = this._previewPanel.getRoot().scrollTop;
       const codeTopLine = this._codePanel.getTopVisibleLine();
       const previewAnchor = this._buildTypingPreviewAnchor(codeTopLine);
@@ -1565,15 +1596,17 @@ export class EditorCore {
         this._typingPreviewCodeTopLine = codeTopLine;
         this._schedulePreviewStabilityUnlock(220);
       }
-    }, 150);
+    }, delay);
   }
 
   _scheduleCompatibilityValidation() {
     if (!this._compatibilityEnabled) return;
     clearTimeout(this._compatibilityDebounce);
+    // Also apply adaptive scaling to compatibility validation
+    const delay = Math.max(250, this._calculateAdaptiveDebounceDelay() + 100);
     this._compatibilityDebounce = setTimeout(() => {
       this.validateCompatibility({ force: true });
-    }, this._compatibilityDebounceMs);
+    }, delay);
   }
 
   _updatePreview(markdown, opts = {}) {
@@ -1583,16 +1616,242 @@ export class EditorCore {
       : null;
 
     this._previewRenderCycleId += 1;
-    const { html } = this._parser.render(markdown);
+    const renderResult = this._renderPreviewMarkdown(markdown);
+    const { html, tokens } = renderResult;
     this._setSelectedPreviewImage(null);
-    this._previewPanel.render(html);
-    this._renderMath();
+
+    let changedRoots = [this._previewPanelEl];
+    if (Array.isArray(renderResult.blocks)) {
+      const patchMeta = this._previewPanel.renderBlocks(renderResult.blocks);
+      changedRoots = patchMeta.changedRoots.length ? patchMeta.changedRoots : [];
+    } else {
+      const patchMeta = this._previewPanel.render(html);
+      changedRoots = patchMeta.changedRoots;
+    }
+
+    this._renderMath(changedRoots);
     this._alignPreviewToCodeCursor(cursorPreviewAnchor);
-    this._trackPendingPreviewImages(this._previewRenderCycleId);
+    this._trackPendingPreviewImages(this._previewRenderCycleId, changedRoots);
     // Re-apply pinned scroll after synchronous post-processing.
     this._applyPinnedPreviewScroll();
-    this._renderMermaid();
+    this._renderMermaid(changedRoots);
     this._imageResize?.attachHandlers();
+    this._opts.onPreviewRendered?.(markdown, tokens, html);
+  }
+
+  _renderPreviewMarkdown(markdown) {
+    if (!this._canUseIncrementalPreview(markdown)) {
+      return this._renderFullPreview(markdown);
+    }
+
+    const nextBlocks = this._splitMarkdownIntoRenderBlocks(markdown);
+    if (!nextBlocks.length) {
+      const full = this._renderFullPreview(markdown);
+      this._previewBlockCache = {
+        markdown,
+        blocks: [],
+      };
+      return full;
+    }
+
+    const prevCache = this._previewBlockCache;
+    if (!prevCache || prevCache.markdown == null || !Array.isArray(prevCache.blocks)) {
+      return this._renderBlocksFromScratch(markdown, nextBlocks);
+    }
+
+    const prevBlocks = prevCache.blocks;
+    let prefix = 0;
+    while (
+      prefix < prevBlocks.length
+      && prefix < nextBlocks.length
+      && prevBlocks[prefix].text === nextBlocks[prefix].text
+    ) {
+      prefix += 1;
+    }
+
+    let suffix = 0;
+    while (
+      suffix < prevBlocks.length - prefix
+      && suffix < nextBlocks.length - prefix
+      && prevBlocks[prevBlocks.length - 1 - suffix].text === nextBlocks[nextBlocks.length - 1 - suffix].text
+    ) {
+      suffix += 1;
+    }
+
+    const dirtyStartIndex = prefix;
+    const dirtyEndIndex = nextBlocks.length - suffix - 1;
+    const changedBlockCount = dirtyEndIndex >= dirtyStartIndex
+      ? dirtyEndIndex - dirtyStartIndex + 1
+      : 0;
+
+    if (!changedBlockCount) {
+      return {
+        html: prevBlocks.map((b) => b.html).join(''),
+        tokens: [],
+        blocks: prevBlocks,
+      };
+    }
+
+    if (changedBlockCount > 24) {
+      return this._renderFullPreview(markdown);
+    }
+
+    const dirtyStartLine = nextBlocks[dirtyStartIndex].startLine;
+    const dirtyEndLine = nextBlocks[dirtyEndIndex].endLine;
+    if (this._isIncrementalPreviewUnsafe(markdown, dirtyStartLine, dirtyEndLine)) {
+      return this._renderFullPreview(markdown);
+    }
+
+    const mergedBlocks = [];
+    for (let i = 0; i < nextBlocks.length; i += 1) {
+      const nextBlock = nextBlocks[i];
+
+      if (i < prefix) {
+        const prevBlock = prevBlocks[i];
+        mergedBlocks.push({
+          ...nextBlock,
+          html: prevBlock.html,
+          reuse: true,
+          lineDelta: nextBlock.startLine - prevBlock.startLine,
+        });
+        continue;
+      }
+
+      if (i > dirtyEndIndex) {
+        const suffixOffset = nextBlocks.length - 1 - i;
+        const prevBlock = prevBlocks[prevBlocks.length - 1 - suffixOffset];
+        mergedBlocks.push({
+          ...nextBlock,
+          html: prevBlock.html,
+          reuse: true,
+          lineDelta: nextBlock.startLine - prevBlock.startLine,
+        });
+        continue;
+      }
+
+      const rendered = this._parser.render(nextBlock.text);
+      mergedBlocks.push({
+        ...nextBlock,
+        html: rendered.html,
+        reuse: false,
+        lineDelta: nextBlock.startLine,
+      });
+    }
+
+    const html = mergedBlocks.map((b) => b.html).join('');
+    this._previewBlockCache = {
+      markdown,
+      blocks: mergedBlocks,
+    };
+    return { html, tokens: [], blocks: mergedBlocks };
+  }
+
+  _renderBlocksFromScratch(markdown, blocks) {
+    const renderedBlocks = blocks.map((block) => {
+      const rendered = this._parser.render(block.text);
+      return {
+        ...block,
+        html: rendered.html,
+        reuse: false,
+        lineDelta: block.startLine,
+      };
+    });
+
+    this._previewBlockCache = {
+      markdown,
+      blocks: renderedBlocks,
+    };
+
+    return {
+      html: renderedBlocks.map((b) => b.html).join(''),
+      tokens: [],
+      blocks: renderedBlocks,
+    };
+  }
+
+  _renderFullPreview(markdown) {
+    const { html, tokens } = this._parser.render(markdown);
+    this._previewBlockCache = null;
+    return { html, tokens };
+  }
+
+  _canUseIncrementalPreview(markdown) {
+    // Keep incremental mode for larger docs where full re-render is expensive.
+    if (markdown.length < 48_000) return false;
+
+    // Global markdown constructs can affect distant blocks; fallback to full render.
+    if (/^\s{0,3}\[[^\]]+\]:\s+/m.test(markdown)) return false;
+    if (/^\s*\[\^[^\]]+\]:\s+/m.test(markdown)) return false;
+    if (/^\s*---\s*\n[\s\S]*?\n---\s*(?:\n|$)/.test(markdown)) return false;
+    if (/^\s*<\/?[A-Za-z][^>]*>\s*$/m.test(markdown)) return false;
+
+    return true;
+  }
+
+  _isIncrementalPreviewUnsafe(markdown, startLine, endLine) {
+    const lines = markdown.split('\n');
+    const from = Math.max(0, startLine - 2);
+    const to = Math.min(lines.length - 1, endLine + 2);
+    const windowText = lines.slice(from, to + 1).join('\n');
+
+    if (/^\s{0,3}\[[^\]]+\]:\s+/m.test(windowText)) return true;
+    if (/^\s*\[\^[^\]]+\]:\s+/m.test(windowText)) return true;
+    if (/^\s*<\/?[A-Za-z][^>]*>\s*$/m.test(windowText)) return true;
+    return false;
+  }
+
+  _splitMarkdownIntoRenderBlocks(markdown) {
+    if (!markdown) return [];
+
+    const hasTrailingNewline = markdown.endsWith('\n');
+    const rawLines = markdown.split('\n');
+    const lines = hasTrailingNewline ? rawLines.slice(0, -1) : rawLines;
+
+    if (!lines.length) return [];
+
+    const blocks = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      if (!lines[i].trim()) {
+        i += 1;
+        continue;
+      }
+
+      const start = i;
+      const fence = lines[i].match(/^\s*(`{3,}|~{3,})/);
+
+      if (fence) {
+        const marker = fence[1];
+        i += 1;
+        while (i < lines.length) {
+          if (new RegExp(`^\\s*${marker[0]}{${marker.length},}\\s*$`).test(lines[i])) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+      } else {
+        i += 1;
+        while (i < lines.length && lines[i].trim()) {
+          i += 1;
+        }
+      }
+
+      const end = i - 1;
+      let text = lines.slice(start, end + 1).join('\n');
+      if (hasTrailingNewline && end === lines.length - 1) {
+        text += '\n';
+      }
+
+      blocks.push({
+        startLine: start,
+        endLine: end,
+        text,
+      });
+    }
+
+    return blocks;
   }
 
   _alignPreviewToCodeCursor(anchor) {
@@ -1642,8 +1901,13 @@ export class EditorCore {
     return this._capturePreviewPixelAnchorForTopVisibleLine();
   }
 
-  _renderMath() {
-    this._previewPanelEl.querySelectorAll('.se-math-inline').forEach(el => {
+  _renderMath(scopeRoots = null) {
+    const roots = Array.isArray(scopeRoots) && scopeRoots.length
+      ? scopeRoots
+      : [this._previewPanelEl];
+
+    roots.forEach((root) => {
+      root.querySelectorAll('.se-math-inline').forEach(el => {
       const tex = decodeURIComponent(el.getAttribute('data-tex') ?? '');
       try {
         el.innerHTML = katex.renderToString(tex, { throwOnError: false, displayMode: false });
@@ -1652,7 +1916,7 @@ export class EditorCore {
       }
     });
 
-    this._previewPanelEl.querySelectorAll('.se-math-block').forEach(el => {
+      root.querySelectorAll('.se-math-block').forEach(el => {
       const tex = decodeURIComponent(el.getAttribute('data-tex') ?? '');
       try {
         el.innerHTML = katex.renderToString(tex, { throwOnError: false, displayMode: true });
@@ -1660,17 +1924,23 @@ export class EditorCore {
         el.textContent = tex;
       }
     });
+    });
   }
 
-  _renderMermaid() {
+  _renderMermaid(scopeRoots = null) {
     const mermaid = window.mermaid;
     if (!mermaid) {
       this._pendingMermaidRenders = 0;
       return;
     }
 
-    const targets = Array.from(this._previewPanelEl
-      .querySelectorAll('.se-mermaid:not(.se-mermaid--rendered)'));
+    const roots = Array.isArray(scopeRoots) && scopeRoots.length
+      ? scopeRoots
+      : [this._previewPanelEl];
+
+    const targets = roots.flatMap((root) => Array.from(
+      root.querySelectorAll('.se-mermaid:not(.se-mermaid--rendered)'),
+    ));
     this._pendingMermaidRenders = targets.length;
     if (!targets.length) return;
 
@@ -1752,8 +2022,11 @@ export class EditorCore {
     this._previewScrollUnlockTimer = setTimeout(releasePreviewLock, initialDelayMs);
   }
 
-  _trackPendingPreviewImages(renderCycleId) {
-    const images = Array.from(this._previewPanelEl.querySelectorAll('img'));
+  _trackPendingPreviewImages(renderCycleId, scopeRoots = null) {
+    const roots = Array.isArray(scopeRoots) && scopeRoots.length
+      ? scopeRoots
+      : [this._previewPanelEl];
+    const images = roots.flatMap((root) => Array.from(root.querySelectorAll('img')));
     let pending = 0;
 
     images.forEach((img) => {
@@ -1859,13 +2132,16 @@ export class EditorCore {
     return this._scrollSyncEnabled && this._mode === 'split' && !this._scrollSyncSuppressed;
   }
 
-  // Temporarily suppress scroll sync during active editing (debounce: 300ms after last change).
+  // Temporarily suppress scroll sync during active editing.
+  // Keep it coupled to preview debounce so code->preview sync resumes shortly
+  // after the debounced preview update for the current document state.
   _suppressScrollSyncTemporarily() {
     this._scrollSyncSuppressed = true;
     clearTimeout(this._scrollSyncDebounceTimer);
+    const releaseDelay = Math.max(120, this._calculateAdaptiveDebounceDelay() + 40);
     this._scrollSyncDebounceTimer = setTimeout(() => {
       this._scrollSyncSuppressed = false;
-    }, 300);
+    }, releaseDelay);
   }
 
   // Begin programmatic scroll lock and refresh its trailing timeout.
@@ -2178,18 +2454,15 @@ export class EditorCore {
     if (!src) return null;
 
     const expectsDrawioSuffix = imageEl.classList.contains('se-drawio');
-    const escapedSrc = _escapeRegExp(src);
-    const tokenPattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)(?:\\{[^}]*\\})?`, 'g');
-    let match;
+    const tokens = _findMarkdownImageTokens(blockText);
 
-    while ((match = tokenPattern.exec(blockText)) !== null) {
-      const token = match[0];
-      const hasDrawioSuffix = /\{[^}]*\}$/.test(token);
-      if (expectsDrawioSuffix && !hasDrawioSuffix) continue;
+    for (const token of tokens) {
+      if (_normalizeMarkdownImageSrc(token.src) !== src) continue;
+      if (expectsDrawioSuffix && !token.hasDrawioSuffix) continue;
 
       const blockStart = this._getCharacterOffsetForLine(lines, startLine);
-      let from = blockStart + match.index;
-      let to = from + token.length;
+      let from = blockStart + token.from;
+      let to = blockStart + token.to;
 
       // Keep inline spacing natural after removing just one markdown image token.
       if (markdown[from - 1] === ' ' && markdown[to] === ' ') {
@@ -2284,8 +2557,29 @@ function _resolveInsertIndex(items, beforeId, afterId) {
   return items.length;
 }
 
-function _escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function _findMarkdownImageTokens(text) {
+  const tokens = [];
+  const imagePattern = /!\[[^\]\r\n]*\]\(([^)\r\n]+)\)(\{[^}]*\})?/g;
+  let match;
+
+  while ((match = imagePattern.exec(String(text ?? ''))) !== null) {
+    tokens.push({
+      from: match.index,
+      to: match.index + match[0].length,
+      src: match[1] ?? '',
+      hasDrawioSuffix: Boolean(match[2]),
+    });
+  }
+
+  return tokens;
+}
+
+function _normalizeMarkdownImageSrc(src) {
+  const value = String(src ?? '').trim();
+  if (value.startsWith('<') && value.endsWith('>')) {
+    return value.slice(1, -1).trim();
+  }
+  return value;
 }
 
 function _replaceFenceLanguage(infoString, language) {
@@ -2371,6 +2665,7 @@ function _resolveHintsConfig(value) {
     dismissible: value?.dismissible !== false,
   };
 }
+
 
 function _resolveAIConfig(value) {
   return {

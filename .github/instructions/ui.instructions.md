@@ -7,6 +7,10 @@ applyTo: "src/ui/**"
 
 - Keep UI modules component-scoped: each class should own only its container, listeners, and rendering logic.
 - In `PreviewPanel`, preserve sanitization and sync attributes; do not remove `data-source-line` / `data-source-line-end` support.
+- In `PreviewPanel`, preserve block-patch render semantics:
+	- keep `render(html)` as full replace fallback,
+	- keep `renderBlocks(blocks)` for incremental updates so unchanged blocks keep existing DOM nodes,
+	- for reused blocks with shifted source mapping, update `data-source-line` / `data-source-line-end` attributes in-place instead of replacing inner HTML.
 - When adding preview attributes required by features, update DOMPurify allowlist deliberately and minimally.
 - Preserve scroll position on preview re-render unless a feature explicitly requires scroll reset.
 - In `CodePanel`, keep editor-facing selection/line behavior 0-based and compatible with `EditorCore` APIs.
@@ -49,6 +53,7 @@ applyTo: "src/ui/**"
 - Copy button (`.se-code-block__copy-btn`) uses mask-image SVG icons driven by `currentColor`; `.is-copied` state switches the icon to a checkmark and color to `--se-color-success`.
 - `PreviewPanel._handleClick()` must check `.se-code-block__copy-btn` first (before `data-source-line` navigation) and return early after handling copy.
 - Scroll suspension counter (`_scrollCallbacksSuspended`) in `PreviewPanel` is reference-counted; always call `resumeScrollCallbacks()` to match each `suspendScrollCallbacks()`.
+- Keep preview post-processing scope-aware in `EditorCore` integration: KaTeX, Mermaid, and pending-image tracking should run on changed preview roots whenever incremental block patching is used.
 - Preserve loading overlay UX in `LoadingOverlay`:
 	- keep semi-transparent modal-like backdrop so editor context remains visible,
 	- keep anti-flicker timing (`showDelayMs`, `minVisibleMs`) and do not regress to immediate flash show/hide,

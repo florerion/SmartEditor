@@ -18,6 +18,7 @@ applyTo: "src/core/**"
 - Preserve scroll-sync loop guards in `EditorCore`:
 	- source lock (`_scrollSyncSource`) with trailing debounce,
 	- temporary typing suppression (`_suppressScrollSyncTemporarily`) to prevent editor jumps while editing.
+	- keep typing suppression release delay coupled to current preview debounce (adaptive), so code->preview sync resumes shortly after the debounced preview update and does not lag behind fast incremental (warm-cache) renders.
 - Keep click navigation ratio-aware and symmetric:
 	- code cursor ratio drives preview alignment,
 	- preview click ratio drives code alignment.
@@ -59,5 +60,11 @@ applyTo: "src/core/**"
 	- Do not replace the polling loop with a fixed timeout; the loop must wait for actual Mermaid/image completion.
 	- `insertText()` in `EditorCore` auto-applies the stability lock when the inserted text contains `![` (image markdown); do not bypass this by calling `_codePanel.insertText()` directly for image-bearing inserts.
 	- `_upsertDrawioBlock()` explicitly applies the lock around `setMarkdown()` for the update-existing-block path; preserve this because `setMarkdown` renders synchronously and the replacement image loads asynchronously.
+- Preserve hybrid incremental preview render behavior in `EditorCore`:
+	- incremental mode uses cached block HTML for unchanged regions and re-renders only dirty blocks,
+	- always preserve `data-source-line` and `data-source-line-end` mapping when reusing cached blocks (line-shift correction is required),
+	- fallback to full render for risky/global markdown constructs (e.g. reference definitions, frontmatter, raw HTML blocks) or large dirty regions,
+	- keep full-render fallback as the source of truth for correctness; optimization must never win over semantic parity.
+	- when incremental block patching is active, keep post-render work scoped to changed preview roots (`_renderMath`, `_renderMermaid`, image load tracking) instead of rescanning the whole preview tree.
 - Keep `setMarkdown(markdown, { preservePreviewScroll: true })` option behavior stable for programmatic full-document rewrites (toolbar/actions) to avoid preview jumps.
 - `CodePanel.replaceRange(from, to, text, opts)` is a pure document patch without cursor/selection move; preserve this semantic when using it for source edits triggered from preview UI.

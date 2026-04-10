@@ -1,8 +1,7 @@
-import { Compartment, EditorState, RangeSetBuilder, Transaction } from '@codemirror/state';
+import { Compartment, EditorState, RangeSetBuilder, StateField, Transaction } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
-  ViewPlugin,
   WidgetType,
   keymap,
   highlightSpecialChars,
@@ -53,18 +52,18 @@ const collapseDecoration = Decoration.replace({
   inclusive: false,
 });
 
-const longPayloadCollapsePlugin = ViewPlugin.fromClass(class {
-  constructor(view) {
-    this.decorations = buildCollapseDecorations(view);
-  }
-
-  update(update) {
-    if (update.docChanged || update.viewportChanged) {
-      this.decorations = buildCollapseDecorations(update.view);
-    }
-  }
-}, {
-  decorations: plugin => plugin.decorations,
+const longPayloadCollapseField = StateField.define({
+  create(state) {
+    return buildCollapseDecorationsForDoc(state.doc);
+  },
+  update(value, transaction) {
+    if (!transaction.docChanged) return value;
+    return updateCollapseDecorations(value, transaction);
+  },
+  provide: field => [
+    EditorView.decorations.from(field),
+    EditorView.atomicRanges.of(view => view.state.field(field, false) ?? Decoration.none),
+  ],
 });
 
 /**
@@ -511,24 +510,85 @@ function _isBlankLine(lineText) {
   return lineText.trim().length === 0;
 }
 
-function buildCollapseDecorations(view) {
+function buildCollapseDecorationsForDoc(doc) {
   const builder = new RangeSetBuilder();
-  for (const range of view.visibleRanges) {
-    let line = view.state.doc.lineAt(range.from);
-    while (line.from <= range.to) {
-      addCollapsedRangesForLine(line, builder);
-      if (line.number >= view.state.doc.lines) break;
-      line = view.state.doc.line(line.number + 1);
-    }
+  for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
+    addCollapsedRangesForLine(doc.line(lineNo), builder);
   }
   return builder.finish();
 }
 
+function updateCollapseDecorations(prevDecorations, transaction) {
+  const doc = transaction.state.doc;
+  let nextDecorations = prevDecorations.map(transaction.changes);
+  const changedLineRanges = _collectChangedLineRanges(doc, transaction.changes);
+
+  for (const range of changedLineRanges) {
+    nextDecorations = nextDecorations.update({
+      filterFrom: range.from,
+      filterTo: range.to,
+      filter: () => false,
+    });
+
+    const additions = buildCollapseDecorationRangesForLineRange(doc, range.from, range.to);
+    if (additions.length) {
+      nextDecorations = nextDecorations.update({ add: additions, sort: true });
+    }
+  }
+
+  return nextDecorations;
+}
+
+function buildCollapseDecorationRangesForLineRange(doc, from, to) {
+  const ranges = [];
+  const startLine = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number;
+  const endLine = doc.lineAt(Math.max(0, Math.min(Math.max(from, to - 1), doc.length))).number;
+
+  for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    const line = doc.line(lineNo);
+    const collapsed = collectCollapsedRangesForLine(line);
+    for (const entry of collapsed) {
+      if (entry.to > entry.from) {
+        ranges.push(collapseDecoration.range(entry.from, entry.to));
+      }
+    }
+  }
+
+  return ranges;
+}
+
+function _collectChangedLineRanges(doc, changes) {
+  const ranges = [];
+
+  changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+    const startPos = Math.max(0, Math.min(fromB, doc.length));
+    const endAnchor = Math.max(fromB, toB - 1);
+    const endPos = Math.max(0, Math.min(endAnchor, doc.length));
+    const lineFrom = doc.lineAt(startPos).from;
+    const lineTo = doc.lineAt(endPos).to;
+    ranges.push({ from: lineFrom, to: lineTo });
+  });
+
+  if (!ranges.length) return ranges;
+
+  ranges.sort((a, b) => a.from - b.from || a.to - b.to);
+  const merged = [ranges[0]];
+
+  for (let i = 1; i < ranges.length; i += 1) {
+    const current = ranges[i];
+    const last = merged[merged.length - 1];
+    if (current.from <= last.to + 1) {
+      last.to = Math.max(last.to, current.to);
+    } else {
+      merged.push({ ...current });
+    }
+  }
+
+  return merged;
+}
+
 function addCollapsedRangesForLine(line, builder) {
-  const collapsedRanges = [
-    ...findBase64Ranges(line),
-    ...findDrawioXmlRanges(line),
-  ].sort((a, b) => a.from - b.from);
+  const collapsedRanges = collectCollapsedRangesForLine(line);
 
   for (const range of collapsedRanges) {
     if (range.to > range.from) {
@@ -537,7 +597,14 @@ function addCollapsedRangesForLine(line, builder) {
   }
 }
 
-function findBase64Ranges(line) {
+function collectCollapsedRangesForLine(line) {
+  return [
+    ...findImageSourceRanges(line),
+    ...findDrawioXmlRanges(line),
+  ].sort((a, b) => a.from - b.from);
+}
+
+function findImageSourceRanges(line) {
   const result = [];
   const text = line.text;
   const imageRegex = /!\[[^\]]*\]\(([^)\r\n]+)\)/g;
@@ -545,18 +612,13 @@ function findBase64Ranges(line) {
 
   while ((match = imageRegex.exec(text)) !== null) {
     const src = match[1];
-    const markerIndex = src.indexOf(';base64,');
-    if (markerIndex < 0) continue;
-
-    const payloadStart = markerIndex + ';base64,'.length;
-    const payloadLength = src.length - payloadStart;
-    if (payloadLength <= COLLAPSE_MIN_LENGTH) continue;
+    if (src.length <= COLLAPSE_MIN_LENGTH) continue;
 
     const groupStart = match.index + match[0].indexOf('(') + 1;
-    const collapseFrom = line.from + groupStart + payloadStart + COLLAPSE_HEAD;
+    const collapseFrom = line.from + groupStart + COLLAPSE_HEAD;
     const collapseTo = line.from + groupStart + src.length - COLLAPSE_TAIL;
     if (collapseTo > collapseFrom) {
-      result.push({ from: collapseFrom, to: collapseTo });
+      result.push({ from: collapseFrom, to: collapseTo, kind: 'image-src' });
     }
   }
 
@@ -577,7 +639,7 @@ function findDrawioXmlRanges(line) {
     const collapseFrom = line.from + match.index + xmlStartInMatch + COLLAPSE_HEAD;
     const collapseTo = line.from + match.index + xmlStartInMatch + xml.length - COLLAPSE_TAIL;
     if (collapseTo > collapseFrom) {
-      result.push({ from: collapseFrom, to: collapseTo });
+      result.push({ from: collapseFrom, to: collapseTo, kind: 'drawio-xml' });
     }
   }
 
@@ -592,7 +654,7 @@ export class CodePanel {
    * @param {HTMLElement} container
    * @param {object} opts
    * @param {string}   opts.value
-   * @param {Function} opts.onChange         (value: string) => void
+    * @param {Function} opts.onChange         (payload: { changes: Array<{ from: number, to: number, insert: string }> }) => void
    * @param {Function} opts.onCursorMove     (line: number) => void  — 0-based
    * @param {Function} opts.onSelectionChange (selInfo: object) => void
    * @param {Function} opts.onScroll         (topLine: number) => void  — 0-based
@@ -606,6 +668,7 @@ export class CodePanel {
     this._onScroll = opts.onScroll ?? (() => {});
     this._onHintKey = opts.onHintKey ?? (() => {});
     this._suppressUpdate = false;
+    this._pendingGeometryRefreshRaf = 0;
     this._editableCompartment = new Compartment();
     this._editable = true;
 
@@ -652,14 +715,14 @@ export class CodePanel {
     const state = this._view.state;
     const sel = state.selection.main;
     const text = state.sliceDoc(sel.from, sel.to);
-    const lineFrom = state.doc.lineAt(sel.from).number - 1; // convert to 0-based
+    const lineFrom = state.doc.lineAt(sel.from).number - 1;
     const lineTo = state.doc.lineAt(sel.to).number - 1;
     return { from: sel.from, to: sel.to, text, lineFrom, lineTo };
   }
 
   /**
-   * @param {number} from  character offset
-   * @param {number} to    character offset
+   * @param {number} from
+   * @param {number} to
    */
   setSelection(from, to) {
     this._view.dispatch({ selection: { anchor: from, head: to } });
@@ -839,6 +902,10 @@ export class CodePanel {
   }
 
   destroy() {
+    if (this._pendingGeometryRefreshRaf) {
+      cancelAnimationFrame(this._pendingGeometryRefreshRaf);
+      this._pendingGeometryRefreshRaf = 0;
+    }
     this._scroller?.removeEventListener('scroll', this._boundScroll);
     this._view.destroy();
   }
@@ -862,6 +929,7 @@ export class CodePanel {
         rectangularSelection(),
         highlightActiveLine(),
         markdown(),
+        EditorView.lineWrapping,
         keymap.of([
           {
             key: 'Tab',
@@ -883,10 +951,13 @@ export class CodePanel {
           ...historyKeymap,
           indentWithTab,
         ]),
-        longPayloadCollapsePlugin,
+        longPayloadCollapseField,
         EditorView.updateListener.of(update => {
           if (update.docChanged && !this._suppressUpdate) {
-            this._onChange(update.state.doc.toString());
+            this._onChange({ changes: _collectTextChanges(update) });
+            if (_hasPotentialLongPayloadChange(update)) {
+              this._scheduleViewportGeometryRefresh();
+            }
           }
           if (update.selectionSet) {
             const sel = this._buildSelectionInfo(update.state);
@@ -947,6 +1018,18 @@ export class CodePanel {
     this._onScroll(this.getTopVisibleLine());
   }
 
+  _scheduleViewportGeometryRefresh() {
+    if (this._pendingGeometryRefreshRaf) return;
+
+    this._pendingGeometryRefreshRaf = requestAnimationFrame(() => {
+      this._pendingGeometryRefreshRaf = 0;
+      const head = this._view.state.selection.main.head;
+      this._view.dispatch({
+        effects: EditorView.scrollIntoView(head, { y: 'nearest' }),
+      });
+    });
+  }
+
   _emitHintKeyEvent(view, key, handled) {
     const head = view.state.selection.main.head;
     const line = view.state.doc.lineAt(head);
@@ -957,4 +1040,34 @@ export class CodePanel {
       lineText: line.text,
     });
   }
+}
+
+function _hasPotentialLongPayloadChange(update) {
+  let likely = false;
+
+  update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (likely) return;
+    if (inserted.length <= COLLAPSE_MIN_LENGTH) return;
+
+    const text = inserted.toString();
+    if (/!\[[^\]]*\]\([^\r\n]{140,}\)|!\[draw\.io\]\([^\r\n]+\)\{[^\r\n]{140,}\}/.test(text)) {
+      likely = true;
+    }
+  });
+
+  return likely;
+}
+
+function _collectTextChanges(update) {
+  const changes = [];
+
+  update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    changes.push({
+      from: fromA,
+      to: toA,
+      insert: inserted.toString(),
+    });
+  });
+
+  return changes;
 }
