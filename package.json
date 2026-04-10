@@ -18,7 +18,8 @@
   "files": [
     "dist/*.js",
     "dist/*.js.map",
-    "scripts/download-drawio.mjs"
+    "scripts/download-drawio.mjs",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public"
