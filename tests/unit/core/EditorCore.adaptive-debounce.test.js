@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EditorCore } from '../../../src/core/EditorCore.js';
 
+function createDebounceTestSubject(markdown, previewBlockCache = null) {
+  return {
+    _codePanel: {
+      getValue: () => markdown,
+    },
+    _previewBlockCache: previewBlockCache,
+    _calculateAdaptiveDebounceDelay: EditorCore.prototype._calculateAdaptiveDebounceDelay,
+  };
+}
+
 describe('EditorCore adaptive debounce', () => {
   let element;
   let editor;
@@ -34,42 +44,32 @@ describe('EditorCore adaptive debounce', () => {
 
   it('uses 150ms for documents < 1MB', () => {
     const smallDoc = 'a'.repeat(1024 * 100); // ~100KB
-    editor = new EditorCore(element, { value: smallDoc });
-    editor._previewBlockCache = null;
-    expect(editor._calculateAdaptiveDebounceDelay()).toBe(150);
-    teardown();
+    const subject = createDebounceTestSubject(smallDoc, null);
+    expect(subject._calculateAdaptiveDebounceDelay()).toBe(150);
   });
 
   it('uses 300ms for documents 1-3MB', () => {
     const mediumDoc = 'a'.repeat(1024 * 1024 * 2); // ~2MB
-    editor = new EditorCore(element, { value: mediumDoc });
-    editor._previewBlockCache = null;
-    expect(editor._calculateAdaptiveDebounceDelay()).toBe(300);
-    teardown();
+    const subject = createDebounceTestSubject(mediumDoc, null);
+    expect(subject._calculateAdaptiveDebounceDelay()).toBe(300);
   });
 
   it('uses 500ms for documents 3-5MB', () => {
     const largeDoc = 'a'.repeat(1024 * 1024 * 4); // ~4MB
-    editor = new EditorCore(element, { value: largeDoc });
-    editor._previewBlockCache = null;
-    expect(editor._calculateAdaptiveDebounceDelay()).toBe(500);
-    teardown();
+    const subject = createDebounceTestSubject(largeDoc, null);
+    expect(subject._calculateAdaptiveDebounceDelay()).toBe(500);
   });
 
   it('uses 800ms for documents > 5MB', () => {
     const veryLargeDoc = 'a'.repeat(1024 * 1024 * 6); // ~6MB
-    editor = new EditorCore(element, { value: veryLargeDoc });
-    editor._previewBlockCache = null;
-    expect(editor._calculateAdaptiveDebounceDelay()).toBe(800);
-    teardown();
+    const subject = createDebounceTestSubject(veryLargeDoc, null);
+    expect(subject._calculateAdaptiveDebounceDelay()).toBe(800);
   });
 
   it('uses 80ms when incremental preview cache is warm', () => {
     const mediumDoc = 'a'.repeat(1024 * 1024 * 2); // ~2MB
-    editor = new EditorCore(element, { value: mediumDoc });
-    expect(editor._previewBlockCache).not.toBeNull();
-    expect(editor._calculateAdaptiveDebounceDelay()).toBe(80);
-    teardown();
+    const subject = createDebounceTestSubject(mediumDoc, {});
+    expect(subject._calculateAdaptiveDebounceDelay()).toBe(80);
   });
 
   it('schedulePreviewUpdate uses adaptive delay', () => {
