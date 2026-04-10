@@ -155,11 +155,15 @@ function _collectListItems(lines) {
       type: /\d+\./.test(marker) ? 'ordered' : 'unordered',
       number: /\d+\./.test(marker) ? Number.parseInt(marker, 10) : null,
       text,
-      isTask: /^\[[^\]]+\]/.test(text),
+      isTask: _looksLikeTaskMarkerStart(text),
     });
   });
 
   return items;
+}
+
+function _looksLikeTaskMarkerStart(text) {
+  return /^\[[^\]]*\](?:\s|$)/.test(String(text ?? ''));
 }
 
 function _expectedUnorderedMarker(items, index) {

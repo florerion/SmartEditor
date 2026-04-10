@@ -102,4 +102,21 @@ describe('EditorCore proposeChange and preview image delete', () => {
 
     editor.destroy();
   });
+
+  it('deletes full base64 image markdown token when preview image is selected', () => {
+    const src = `data:image/png;base64,${'a'.repeat(40000)}`;
+    const editor = createEditor(`before\n![Alt](${src})\nafter`);
+    const img = editor._previewPanel.getRoot().querySelector('img.se-image');
+
+    expect(img).toBeTruthy();
+
+    editor._setSelectedPreviewImage(img);
+    const event = new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe('before\n\nafter');
+
+    editor.destroy();
+  });
 });

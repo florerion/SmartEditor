@@ -8,6 +8,27 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
+## [0.8.0] - 2026-04-10
+
+### Added
+- Added `onPreviewRendered(markdown, tokens, html)` callback for integrations that need rendered payloads.
+- Added incremental block-patch preview rendering path for large markdown documents (with safe full-render fallback).
+- Added additional tests for adaptive debounce, incremental preview mapping stability, base64 image deletion, and large-image line sync.
+
+### Changed
+- Changed `onChange` callback contract to `onChange(markdown)` and aligned it with debounced preview update flow.
+- Updated `<smart-editor>` `se-change` event dispatch timing to fire after preview render completion (queued in microtask).
+- Improved editing responsiveness with adaptive preview debounce and adaptive scroll-sync suppression release timing.
+- Expanded code-view payload collapsing to include long markdown image sources (not only draw.io payloads).
+
+### Fixed
+- Fixed preview image deletion flow to reliably remove the full markdown image token, including long/base64 sources and normalized src variants.
+- Fixed list compatibility detection so markdown link lists are not incorrectly reported as invalid task markers.
+- Fixed source-line mapping stability in preview after inserting large image blocks.
+
+### Docs
+- Updated README callback/event documentation for `onChange`, `onPreviewRendered`, and `se-change` timing semantics.
+
 ## [v0.7.4] - 2026-04-04
 
 ### Added
@@ -127,7 +148,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Versions before tagged releases were reconstructed from documented project history and git commit/PR metadata.
 - Tag naming is preserved as published (both `0.5.1` and `v*` tags exist in repository history).
 
-[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/florerion/SmartEditor/compare/v0.7.4...v0.8.0
 [v0.7.4]: https://github.com/florerion/SmartEditor/compare/v0.7.3...v0.7.4
 [v0.7.3]: https://github.com/florerion/SmartEditor/compare/v0.7.2...v0.7.3
 [v0.7.2]: https://github.com/florerion/SmartEditor/compare/v0.7.1...v0.7.2

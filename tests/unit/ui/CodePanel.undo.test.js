@@ -43,4 +43,15 @@ describe('CodePanel', () => {
     panel.destroy();
   });
 
+  it('visually collapses long image URLs with the same editor mechanism used for draw.io lines', () => {
+    const longUrl = `https://example.com/assets/${'segment/'.repeat(24)}image.png`;
+    const panel = createCodePanel(`![preview](${longUrl})`);
+
+    const collapseWidgets = panel._view.dom.querySelectorAll('.cm-se-collapse-widget');
+
+    expect(collapseWidgets).toHaveLength(1);
+
+    panel.destroy();
+  });
+
 });

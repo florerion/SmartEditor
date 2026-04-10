@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorCore } from '../../src/core/EditorCore.js';
 
 function createEditor(value, opts = {}) {
@@ -7,6 +7,10 @@ function createEditor(value, opts = {}) {
   document.body.appendChild(host);
   return new EditorCore(host, { value, ...opts });
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('EditorCore preview interactions', () => {
   it('changes code fence language from preview toolbar select', () => {
@@ -48,5 +52,31 @@ describe('EditorCore preview interactions', () => {
     const disabledEditor = createEditor('# Two', { mode: 'split', scrollSync: false });
     expect(disabledEditor._isScrollSyncActive()).toBe(false);
     disabledEditor.destroy();
+  });
+
+  it('calls onChange with markdown and onPreviewRendered with rendered payload after debounce', async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const onPreviewRendered = vi.fn();
+    const editor = createEditor('alpha', { onChange, onPreviewRendered });
+
+    onChange.mockClear();
+    onPreviewRendered.mockClear();
+
+    editor.insertText('!', editor.getMarkdown().length);
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onPreviewRendered).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('alpha!');
+    expect(onPreviewRendered).toHaveBeenCalledTimes(1);
+    expect(onPreviewRendered.mock.calls[0][0]).toBe('alpha!');
+    expect(Array.isArray(onPreviewRendered.mock.calls[0][1])).toBe(true);
+    expect(typeof onPreviewRendered.mock.calls[0][2]).toBe('string');
+
+    editor.destroy();
   });
 });

@@ -102,6 +102,19 @@ describe('CompatibilityService table rules', () => {
     expect(mixedIssues[0].lineFrom).toBe(1);
   });
 
+  it('does not treat markdown link lists as invalid task lists', () => {
+    const service = new CompatibilityService();
+    const markdown = [
+      '- [wepiofjweijf](http://example.com)',
+      '- [owijfewoiefj](http://example.com)',
+      '- [woepfjoiwjefoiwj](http://example.com)',
+    ].join('\n');
+    const report = service.validate(markdown);
+    const taskIssues = report.issues.filter((issue) => issue.code === 'list.task-marker-invalid');
+
+    expect(taskIssues).toHaveLength(0);
+  });
+
   it('reports unescaped pipes inside table cells instead of only column mismatch noise', () => {
     const service = new CompatibilityService();
     const markdown = ['| A | B |', '| --- | --- |', '| foo | bar|baz |'].join('\n');

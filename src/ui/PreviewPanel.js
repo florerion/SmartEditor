@@ -34,13 +34,8 @@ export class PreviewPanel {
     return this._container.innerHTML;
   }
 
-  /**
-   * Replace preview content with re-rendered HTML.
-   * Scroll position is preserved across updates.
-   * @param {string} html  raw HTML from markdown-it
-   */
-  render(html) {
-    const clean = DOMPurify.sanitize(html, {
+  _sanitize(html) {
+    return DOMPurify.sanitize(html, {
       ADD_TAGS: ['pre', 'code', 'select', 'option', 'button', 'input'],
       // Allow data-source-* attributes so sync continues to work after DOMPurify
       ADD_ATTR: [
@@ -55,10 +50,112 @@ export class PreviewPanel {
       ],
       ALLOW_DATA_ATTR: true,
     });
+  }
+
+  /**
+   * Replace preview content with re-rendered HTML.
+   * Scroll position is preserved across updates.
+   * @param {string} html  raw HTML from markdown-it
+   */
+  render(html) {
+    const clean = this._sanitize(html);
 
     const scrollTop = this._container.scrollTop;
     this._container.innerHTML = clean;
     this._container.scrollTop = scrollTop;
+
+    return {
+      changedRoots: [this._container],
+      fullReplace: true,
+    };
+  }
+
+  /**
+   * Patch preview content using block wrappers to avoid full-root replacement.
+   * @param {Array<{ html: string, reuse?: boolean, lineDelta?: number }>} blocks
+   * @returns {{ changedRoots: HTMLElement[], fullReplace: boolean }}
+   */
+  renderBlocks(blocks) {
+    const scrollTop = this._container.scrollTop;
+    const wrappers = Array.from(this._container.querySelectorAll('[data-se-preview-block]'));
+    const needsRebuild = wrappers.length !== blocks.length;
+
+    if (needsRebuild) {
+      this._container.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      const changedRoots = [];
+
+      blocks.forEach((block, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.setAttribute('data-se-preview-block', String(index));
+        wrapper.innerHTML = this._sanitize(block.html);
+        // On full wrapper rebuild we must use absolute line offsets,
+        // because reused blocks carry relative deltas intended for in-place patching.
+        const lineDelta = Number.isFinite(block.startLine) ? block.startLine : 0;
+        if (lineDelta !== 0) {
+          this._shiftSourceLineAttrsInNode(wrapper, lineDelta);
+        }
+        fragment.appendChild(wrapper);
+        changedRoots.push(wrapper);
+      });
+
+      this._container.appendChild(fragment);
+      this._container.scrollTop = scrollTop;
+      return {
+        changedRoots,
+        fullReplace: true,
+      };
+    }
+
+    const changedRoots = [];
+    blocks.forEach((block, index) => {
+      const wrapper = wrappers[index];
+      if (!wrapper) return;
+
+      if (block.reuse === true) {
+        const lineDelta = Number.isFinite(block.lineDelta) ? block.lineDelta : 0;
+        if (lineDelta !== 0) {
+          this._shiftSourceLineAttrsInNode(wrapper, lineDelta);
+        }
+        return;
+      }
+
+      wrapper.innerHTML = this._sanitize(block.html);
+      const lineDelta = Number.isFinite(block.lineDelta) ? block.lineDelta : 0;
+      if (lineDelta !== 0) {
+        this._shiftSourceLineAttrsInNode(wrapper, lineDelta);
+      }
+      changedRoots.push(wrapper);
+    });
+
+    this._container.scrollTop = scrollTop;
+    return {
+      changedRoots,
+      fullReplace: false,
+    };
+  }
+
+  _shiftSourceLineAttrsInNode(root, lineDelta) {
+    const apply = (el) => {
+      const line = el.getAttribute('data-source-line');
+      if (line != null) {
+        const next = Number.parseInt(line, 10);
+        if (Number.isFinite(next)) {
+          el.setAttribute('data-source-line', String(next + lineDelta));
+        }
+      }
+
+      const lineEnd = el.getAttribute('data-source-line-end');
+      if (lineEnd != null) {
+        const next = Number.parseInt(lineEnd, 10);
+        if (Number.isFinite(next)) {
+          el.setAttribute('data-source-line-end', String(next + lineDelta));
+        }
+      }
+    };
+
+    apply(root);
+    root.querySelectorAll('[data-source-line], [data-source-line-end]').forEach(apply);
   }
 
   /** Remove all active sync highlights. */
