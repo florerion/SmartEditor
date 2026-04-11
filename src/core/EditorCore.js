@@ -20,6 +20,7 @@ import { OllamaAIProvider } from './ai/OllamaAIProvider.js';
 import { HintRegistry } from './hints/HintRegistry.js';
 import { HintService } from './hints/HintService.js';
 import { HintContextDetector } from './hints/HintContextDetector.js';
+import { PreviewRulesEngine } from './preview/PreviewRulesEngine.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
 import { registerDefaultActions } from '../plugins/index.js';
@@ -46,6 +47,19 @@ export class EditorCore {
    * @param {object}      [opts.markdown]
    * @param {object}      [opts.markdown.options]   Passed to markdown-it constructor
    * @param {Array}       [opts.markdown.plugins]   [[fn, opts?], ...]
+  * @param {object}      [opts.previewRules]
+  * @param {boolean}     [opts.previewRules.enabled=true] Enable preview transformation rules pipeline
+  * @param {Array}       [opts.previewRules.markdown] Rules executed before markdown-it rendering
+  * @param {Array}       [opts.previewRules.html] Rules executed on HTML before preview panel sanitization
+  * @param {Function}    [opts.previewRules.includeResolver] Async/sync resolver used by include-style rules
+  * @param {Function}    [opts.previewRules.onRuleError] (error, context) => void
+  * @param {object}      [opts.previewRules.policy]
+  * @param {object}      [opts.previewRules.policy.runtime]
+  * @param {number}      [opts.previewRules.policy.runtime.ruleTimeoutMs=1200]
+  * @param {'continue'|'stop-phase'|'stop-pipeline'} [opts.previewRules.policy.runtime.failMode='continue']
+  * @param {object}      [opts.previewRules.policy.include]
+  * @param {number}      [opts.previewRules.policy.include.maxDepth=5]
+  * @param {string[]}    [opts.previewRules.policy.include.allowPaths]
    * @param {object}      [opts.upload]
   * @param {string}      [opts.upload.endpoint]    Default POST endpoint (all file types) returning { url }
   * @param {Object.<string,string>} [opts.upload.endpoints]  Per-type endpoint overrides; keys are MIME types,
@@ -108,6 +122,9 @@ export class EditorCore {
   * @param {Function}    [opts.onCompatibilityReport]      (report) => void
   * @param {Function}    [opts.onCompatibilityStatusChange] (status, report) => void
   * @param {Function}    [opts.onCompatibilityFixApplied]   (detail) => void
+  * @param {Function}    [opts.onPreviewRulesChanged]       (detail) => void
+  * @param {Function}    [opts.onPreviewRuleError]          (error, context) => void
+  * @param {Function}    [opts.onPreviewPipelineFinished]   (detail) => void
   * @param {Function}    [opts.onBusyChange]                (busyState) => void
   * @param {Function}    [opts.onAIResponse]                (result, request) => void
   * @param {Function}    [opts.onAIError]                   (error, request) => void
@@ -139,10 +156,14 @@ export class EditorCore {
     this._typingPreviewCodeTopLine = null;
     this._pendingMermaidRenders = 0;
     this._pendingPreviewImageLoads = 0;
+    this._pendingPreviewRuleRenders = 0;
     this._previewRenderCycleId = 0;
+    this._previewRuleRenderVersion = 0;
     this._previewPinDeadline = 0;
     this._selectedPreviewImageEl = null;
     this._previewBlockCache = null;
+    this._previewRulesLastRenderPromise = Promise.resolve();
+    this._previewRulesAbortController = null;
     this._theme = 'auto';
     this._compatibilityEnabled = opts.compatibility?.enabled === true;
     this._compatibilityDebounceMs = Number.isFinite(opts.compatibility?.debounce)
@@ -168,6 +189,41 @@ export class EditorCore {
     this._busyTasks = new Map();
     this._busyTaskSeq = 0;
     this._busyState = _createIdleBusyState();
+    this._previewRulesConfig = _resolvePreviewRulesConfig(opts.previewRules);
+    this._previewRulesEngine = new PreviewRulesEngine({
+      enabled: this._previewRulesConfig.enabled,
+      policy: this._previewRulesConfig.policy,
+      includeResolver: this._previewRulesConfig.includeResolver,
+      onRuleError: (error, context) => {
+        this._opts.onPreviewRuleError?.(error, context);
+      },
+      onRulesChanged: (detail) => {
+        this._opts.onPreviewRulesChanged?.(detail);
+      },
+    });
+
+    if (Array.isArray(this._previewRulesConfig.markdown) && this._previewRulesConfig.markdown.length) {
+      this._previewRulesEngine.registerMany(this._previewRulesConfig.markdown);
+    }
+    if (Array.isArray(this._previewRulesConfig.html) && this._previewRulesConfig.html.length) {
+      this._previewRulesEngine.registerMany(this._previewRulesConfig.html);
+    }
+
+    this.previewRules = {
+      getAll: () => this.getPreviewRules(),
+      getById: (id) => this.getPreviewRuleById(id),
+      register: (rule) => this.registerPreviewRule(rule),
+      registerMany: (rules) => this.registerPreviewRules(rules),
+      unregister: (id) => this.unregisterPreviewRule(id),
+      clear: (phase) => this.clearPreviewRules(phase),
+      enable: (id) => this.enablePreviewRule(id),
+      disable: (id) => this.disablePreviewRule(id),
+      setEnabled: (id, enabled) => this.setPreviewRuleEnabled(id, enabled),
+      updateConfig: (id, patch) => this.updatePreviewRuleConfig(id, patch),
+      replaceAll: (input) => this.replacePreviewRules(input),
+      rebuildPreview: (options) => this.rebuildPreview(options),
+      getMetrics: () => this.getPreviewRulesMetrics(),
+    };
 
     const compatibilityProfile = opts.compatibility?.profile
       ?? createEleventyCompatibilityProfile({
@@ -258,6 +314,134 @@ export class EditorCore {
   getSelection() { return this._codePanel.getSelection(); }
 
   setSelection(from, to) { this._codePanel.setSelection(from, to); }
+
+  /** @returns {Array<object>} */
+  getPreviewRules() {
+    return this._previewRulesEngine.getAll();
+  }
+
+  /**
+   * @param {string} id
+   * @returns {object|null}
+   */
+  getPreviewRuleById(id) {
+    return this._previewRulesEngine.getById(id);
+  }
+
+  /**
+   * @param {object} rule
+   */
+  registerPreviewRule(rule) {
+    this._previewRulesEngine.register(rule);
+    this.rebuildPreview({ preserveScroll: true });
+  }
+
+  /**
+   * @param {Array<object>} rules
+   */
+  registerPreviewRules(rules) {
+    this._previewRulesEngine.registerMany(rules);
+    this.rebuildPreview({ preserveScroll: true });
+  }
+
+  /**
+   * @param {string} id
+   * @returns {boolean}
+   */
+  unregisterPreviewRule(id) {
+    const removed = this._previewRulesEngine.unregister(id);
+    if (removed) this.rebuildPreview({ preserveScroll: true });
+    return removed;
+  }
+
+  /**
+   * @param {'markdown'|'html'} [phase]
+   */
+  clearPreviewRules(phase) {
+    this._previewRulesEngine.clear(phase);
+    this.rebuildPreview({ preserveScroll: true });
+  }
+
+  /**
+   * @param {string} id
+   * @returns {boolean}
+   */
+  enablePreviewRule(id) {
+    const changed = this._previewRulesEngine.enable(id);
+    if (changed) this.rebuildPreview({ preserveScroll: true });
+    return changed;
+  }
+
+  /**
+   * @param {string} id
+   * @returns {boolean}
+   */
+  disablePreviewRule(id) {
+    const changed = this._previewRulesEngine.disable(id);
+    if (changed) this.rebuildPreview({ preserveScroll: true });
+    return changed;
+  }
+
+  /**
+   * @param {string} id
+   * @param {boolean} enabled
+   * @returns {boolean}
+   */
+  setPreviewRuleEnabled(id, enabled) {
+    const changed = this._previewRulesEngine.setEnabledById(id, enabled);
+    if (changed) this.rebuildPreview({ preserveScroll: true });
+    return changed;
+  }
+
+  /**
+   * @param {string} id
+   * @param {object} patch
+   * @returns {boolean}
+   */
+  updatePreviewRuleConfig(id, patch) {
+    const changed = this._previewRulesEngine.updateConfig(id, patch);
+    if (changed) this.rebuildPreview({ preserveScroll: true });
+    return changed;
+  }
+
+  /**
+   * @param {{ markdown?: object[], html?: object[] }} input
+   */
+  replacePreviewRules(input) {
+    this._previewRulesEngine.replaceAll(input);
+    this.rebuildPreview({ preserveScroll: true });
+  }
+
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.preserveScroll=false]
+   * @returns {Promise<void>}
+   */
+  async rebuildPreview(opts = {}) {
+    const markdown = this.getMarkdown();
+    const preserveScroll = opts.preserveScroll === true;
+
+    if (!preserveScroll) {
+      this._updatePreview(markdown, { preserveCursorAnchor: true });
+      await this._previewRulesLastRenderPromise;
+      return;
+    }
+
+    const previewScrollTop = this._previewPanel.getRoot().scrollTop;
+    const previewAnchor = this._capturePreviewPixelAnchorForTopVisibleLine();
+    this._beginPreviewStabilityLock(previewScrollTop, previewAnchor);
+    try {
+      this._updatePreview(markdown, { preserveCursorAnchor: true });
+      await this._previewRulesLastRenderPromise;
+    } finally {
+      this._schedulePreviewStabilityUnlock(220);
+    }
+  }
+
+  /** @returns {object} */
+  getPreviewRulesMetrics() {
+    return this._previewRulesEngine.getMetrics();
+  }
 
   /**
    * Insert text at cursor (or at explicit character offset).
@@ -1095,6 +1279,9 @@ export class EditorCore {
     this._unsubscribeHintChange?.();
     this._unsubscribeHintChange = null;
     this._assetHandler?.destroy();
+    this._previewRulesAbortController?.abort('editor-destroy');
+    this._previewRulesAbortController = null;
+    this._previewRulesEngine?.destroy();
     this._imageResize?.destroy();
     this._diffModal.destroy();
     this._drawioModal.destroy();
@@ -1615,31 +1802,158 @@ export class EditorCore {
       ? this._captureCursorPreviewAnchor()
       : null;
 
+    this._previewRuleRenderVersion += 1;
+    const renderVersion = this._previewRuleRenderVersion;
+    const hasAsyncRules = this._previewRulesEngine.hasAsyncRules('markdown')
+      || this._previewRulesEngine.hasAsyncRules('html');
+
+    if (hasAsyncRules) {
+      this._pendingPreviewRuleRenders += 1;
+      const pending = this._runPreviewPipelineAsync(markdown, renderVersion)
+        .then((pipeline) => {
+          if (!pipeline || renderVersion !== this._previewRuleRenderVersion) return;
+          this._applyPreviewPipelineResult(markdown, pipeline, cursorPreviewAnchor);
+        })
+        .catch((error) => {
+          if (String(error?.message || '').includes('aborted')) return;
+          this._opts.onPreviewRuleError?.(error, {
+            stage: 'pipeline',
+            renderVersion,
+          });
+        })
+        .finally(() => {
+          this._pendingPreviewRuleRenders = Math.max(0, this._pendingPreviewRuleRenders - 1);
+          this._applyPinnedPreviewScroll();
+        });
+
+      this._previewRulesLastRenderPromise = pending;
+      return;
+    }
+
+    const pipeline = this._runPreviewPipelineSync(markdown, renderVersion);
+    this._applyPreviewPipelineResult(markdown, pipeline, cursorPreviewAnchor);
+    this._previewRulesLastRenderPromise = Promise.resolve();
+  }
+
+  _runPreviewPipelineSync(markdown, renderVersion) {
+    const signal = null;
+    const selection = this.getSelection();
+    const markdownPhase = this._previewRulesEngine.executePhaseSync('markdown', markdown, {
+      editorId: this._root.id || 'editor',
+      renderVersion,
+      signal,
+      markdown,
+      selection,
+    });
+
+    const mustForceFullRender = this._previewRulesEngine.hasEnabledRules('html');
+    const renderResult = this._renderPreviewMarkdown(markdownPhase.content, {
+      forceFullRender: mustForceFullRender,
+    });
+
+    const htmlPhase = markdownPhase.haltPipeline
+      ? { content: renderResult.html, records: [], touched: false, haltPipeline: true }
+      : this._previewRulesEngine.executePhaseSync('html', renderResult.html, {
+        editorId: this._root.id || 'editor',
+        renderVersion,
+        signal,
+        markdown: markdownPhase.content,
+        selection,
+      });
+
+    return {
+      markdown: markdownPhase.content,
+      html: htmlPhase.content,
+      tokens: renderResult.tokens,
+      blocks: renderResult.blocks,
+      markdownPhase,
+      htmlPhase,
+    };
+  }
+
+  async _runPreviewPipelineAsync(markdown, renderVersion) {
+    const controller = new AbortController();
+    const previousController = this._previewRulesAbortController;
+    previousController?.abort('preview-rules-aborted');
+    this._previewRulesAbortController = controller;
+
+    const selection = this.getSelection();
+    const markdownPhase = await this._previewRulesEngine.executePhaseAsync('markdown', markdown, {
+      editorId: this._root.id || 'editor',
+      renderVersion,
+      signal: controller.signal,
+      markdown,
+      selection,
+    });
+
+    const mustForceFullRender = this._previewRulesEngine.hasEnabledRules('html');
+    const renderResult = this._renderPreviewMarkdown(markdownPhase.content, {
+      forceFullRender: mustForceFullRender,
+    });
+
+    const htmlPhase = markdownPhase.haltPipeline
+      ? { content: renderResult.html, records: [], touched: false, haltPipeline: true }
+      : await this._previewRulesEngine.executePhaseAsync('html', renderResult.html, {
+        editorId: this._root.id || 'editor',
+        renderVersion,
+        signal: controller.signal,
+        markdown: markdownPhase.content,
+        selection,
+      });
+
+    if (this._previewRulesAbortController === controller) {
+      this._previewRulesAbortController = null;
+    }
+
+    return {
+      markdown: markdownPhase.content,
+      html: htmlPhase.content,
+      tokens: renderResult.tokens,
+      blocks: renderResult.blocks,
+      markdownPhase,
+      htmlPhase,
+    };
+  }
+
+  _applyPreviewPipelineResult(sourceMarkdown, pipeline, cursorPreviewAnchor) {
     this._previewRenderCycleId += 1;
-    const renderResult = this._renderPreviewMarkdown(markdown);
-    const { html, tokens } = renderResult;
     this._setSelectedPreviewImage(null);
 
     let changedRoots = [this._previewPanelEl];
-    if (Array.isArray(renderResult.blocks)) {
-      const patchMeta = this._previewPanel.renderBlocks(renderResult.blocks);
+    const htmlTouched = pipeline?.htmlPhase?.touched === true;
+    if (!htmlTouched && Array.isArray(pipeline.blocks)) {
+      const patchMeta = this._previewPanel.renderBlocks(pipeline.blocks);
       changedRoots = patchMeta.changedRoots.length ? patchMeta.changedRoots : [];
     } else {
-      const patchMeta = this._previewPanel.render(html);
+      const patchMeta = this._previewPanel.render(pipeline.html);
       changedRoots = patchMeta.changedRoots;
     }
 
     this._renderMath(changedRoots);
     this._alignPreviewToCodeCursor(cursorPreviewAnchor);
     this._trackPendingPreviewImages(this._previewRenderCycleId, changedRoots);
-    // Re-apply pinned scroll after synchronous post-processing.
     this._applyPinnedPreviewScroll();
     this._renderMermaid(changedRoots);
     this._imageResize?.attachHandlers();
-    this._opts.onPreviewRendered?.(markdown, tokens, html);
+
+    const records = [
+      ...(pipeline.markdownPhase?.records ?? []),
+      ...(pipeline.htmlPhase?.records ?? []),
+    ];
+    this._opts.onPreviewPipelineFinished?.({
+      renderVersion: this._previewRuleRenderVersion,
+      ruleCount: records.length,
+      rules: records,
+    });
+
+    this._opts.onPreviewRendered?.(sourceMarkdown, pipeline.tokens, pipeline.html);
   }
 
-  _renderPreviewMarkdown(markdown) {
+  _renderPreviewMarkdown(markdown, opts = {}) {
+    if (opts.forceFullRender === true) {
+      return this._renderFullPreview(markdown);
+    }
+
     if (!this._canUseIncrementalPreview(markdown)) {
       return this._renderFullPreview(markdown);
     }
@@ -1992,7 +2306,9 @@ export class EditorCore {
   }
 
   _hasPendingPreviewAsyncWork() {
-    return this._pendingMermaidRenders > 0 || this._pendingPreviewImageLoads > 0;
+    return this._pendingMermaidRenders > 0
+      || this._pendingPreviewImageLoads > 0
+      || this._pendingPreviewRuleRenders > 0;
   }
 
   _finalizePreviewStabilityLock() {
@@ -2296,6 +2612,20 @@ export class EditorCore {
       setAIProvider: (provider) => this.setAIProvider(provider),
       getAIProvider: () => this.getAIProvider(),
       requestAIAssistant: (request) => this.requestAIAssistant(request),
+      previewRules: this.previewRules,
+      getPreviewRules: () => this.getPreviewRules(),
+      getPreviewRuleById: (id) => this.getPreviewRuleById(id),
+      registerPreviewRule: (rule) => this.registerPreviewRule(rule),
+      registerPreviewRules: (rules) => this.registerPreviewRules(rules),
+      unregisterPreviewRule: (id) => this.unregisterPreviewRule(id),
+      clearPreviewRules: (phase) => this.clearPreviewRules(phase),
+      enablePreviewRule: (id) => this.enablePreviewRule(id),
+      disablePreviewRule: (id) => this.disablePreviewRule(id),
+      setPreviewRuleEnabled: (id, enabled) => this.setPreviewRuleEnabled(id, enabled),
+      updatePreviewRuleConfig: (id, patch) => this.updatePreviewRuleConfig(id, patch),
+      replacePreviewRules: (input) => this.replacePreviewRules(input),
+      rebuildPreview: (opts) => this.rebuildPreview(opts),
+      getPreviewRulesMetrics: () => this.getPreviewRulesMetrics(),
       openDrawioEditor: (opts) => this.openDrawioEditor(opts),
       getCompatibilityReport: () => this.getCompatibilityReport(),
       getCompatibilityStatus: () => this.getCompatibilityStatus(),
@@ -2663,6 +2993,34 @@ function _resolveHintsConfig(value) {
     debounceMs: Number.isFinite(value?.debounceMs) ? Math.max(0, value.debounceMs) : 800,
     autoHideMs: Number.isFinite(value?.autoHideMs) ? Math.max(0, value.autoHideMs) : 5000,
     dismissible: value?.dismissible !== false,
+  };
+}
+
+function _resolvePreviewRulesConfig(value) {
+  return {
+    enabled: value?.enabled !== false,
+    markdown: Array.isArray(value?.markdown) ? [...value.markdown] : [],
+    html: Array.isArray(value?.html) ? [...value.html] : [],
+    includeResolver: typeof value?.includeResolver === 'function' ? value.includeResolver : null,
+    policy: {
+      include: {
+        maxDepth: Number.isFinite(value?.policy?.include?.maxDepth)
+          ? Math.max(0, value.policy.include.maxDepth)
+          : 5,
+        allowPaths: Array.isArray(value?.policy?.include?.allowPaths)
+          ? value.policy.include.allowPaths.filter((entry) => typeof entry === 'string' && entry.trim())
+          : [],
+        denyOutsideWorkspace: value?.policy?.include?.denyOutsideWorkspace !== false,
+      },
+      runtime: {
+        ruleTimeoutMs: Number.isFinite(value?.policy?.runtime?.ruleTimeoutMs)
+          ? Math.max(0, value.policy.runtime.ruleTimeoutMs)
+          : 1200,
+        failMode: ['continue', 'stop-phase', 'stop-pipeline'].includes(value?.policy?.runtime?.failMode)
+          ? value.policy.runtime.failMode
+          : 'continue',
+      },
+    },
   };
 }
 

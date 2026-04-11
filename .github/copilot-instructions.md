@@ -40,6 +40,19 @@
 - Prefer declarative toolbar composition through `opts.toolbar` for visibility/order/group/display concerns; treat action `group/order` as fallback defaults.
 - For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.
 - Contextual user hints are managed by dedicated hint modules (`HintRegistry`, `HintService`, `HintContextDetector`) plus bottom status UI (`HintsBar`); keep this logic separate from toolbar actions and avoid embedding hint text in action definitions.
+- Preview transformation rules are two-phase and provider-friendly:
+	- markdown phase runs before parser render (for include/macros-like transforms),
+	- html phase runs after parser render and before preview sanitization,
+	- keep source markdown immutable (rules affect preview pipeline only),
+	- runtime API must stay additive (`previewRules.register/unregister/enable/disable/updateConfig/replaceAll/rebuildPreview/getMetrics`).
+- Keep preview-rules async safety in `EditorCore`:
+	- stale async results must not overwrite newer renders (abort/version guard),
+	- include pending rule work in preview stability lock (`_hasPendingPreviewAsyncWork()`),
+	- if any html-phase rules are enabled, force full preview render path (do not patch cached blocks after html rewrites).
+- Web Component preview-rules events to preserve:
+	- `se-preview-rules-changed`,
+	- `se-preview-rule-error`,
+	- `se-preview-pipeline-finished`.
 - Hint selection behavior is split between matching and no-match states:
 	- matching hints use `hints.matchSelection` (`first` or `random`),
 	- no-match behavior uses `hints.noMatchFallback` (`random` or `none`).

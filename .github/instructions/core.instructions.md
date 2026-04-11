@@ -27,6 +27,14 @@ applyTo: "src/core/**"
 	- modes: `replace-all`, `replace-selection`, `insert-at-cursor`,
 	- empty selection + `replace-selection` must fallback to `insert-at-cursor`,
 	- insert mode uses `selection.to`.
+- Preserve preview-rules pipeline behavior in `EditorCore`:
+	- phase order stays `markdown` -> parser render -> `html`,
+	- rules are preview-only transforms (must not mutate source markdown state directly),
+	- stale async rule results must not overwrite newer renders (abort + render version guard),
+	- when html rules are active, use full preview render path instead of incremental block patching.
+- Keep preview-rules runtime API stable:
+	- `previewRules.getAll/getById/register/registerMany/unregister/clear/enable/disable/setEnabled/updateConfig/replaceAll/rebuildPreview/getMetrics`,
+	- callback hooks: `onPreviewRulesChanged`, `onPreviewRuleError`, `onPreviewPipelineFinished`.
 - Preserve `proposeChange(...).accept` viewport semantics:
 	- after accept, code caret should move to the end of inserted/replaced chunk and code viewport should reveal the last added line,
 	- keep preview stable during apply flow (no preview jump) by using `setMarkdown(..., { preservePreviewScroll: true })` for `replace-all` and preview stability lock for selection/cursor edits.
