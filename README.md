@@ -5,7 +5,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/florerion/SmartEditor)](https://github.com/florerion/SmartEditor/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A framework-agnostic Markdown editor for web apps with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, and source-line synchronization.
+A framework-agnostic Markdown editor for web apps with split code/preview UX, runtime API, extensible toolbar actions, markdown-it parsing, source-line synchronization, and preview transformation rules.
 
 This document is for developers integrating the editor into their own application. It is not an end-user guide for writing Markdown.
 
@@ -14,6 +14,7 @@ This document is for developers integrating the editor into their own applicatio
 - [Getting Started](#getting-started)
 - [Embedding the Editor on a Page](#embedding-the-editor-on-a-page)
 - [Configuration Options](#configuration-options)
+- [Preview Rules](#preview-rules)
 - [AI Assistant](#ai-assistant)
 - [Runtime API](#runtime-api)
 - [Events and Callback Usage](#events-and-callback-usage)
@@ -117,6 +118,14 @@ Importing the library registers the custom element as a side effect.
 | `theme` | `'auto' \| 'light' \| 'dark' \| 'sepia' \| 'midnight' \| 'solarized' \| 'nord' \| 'high-contrast'` | `'auto'` | Theme id applied to the editor root. `auto` follows the OS color scheme; the built-in presets can also be switched at runtime. |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
+| `previewRules.enabled` | `boolean` | `true` | Enables the preview transformation pipeline. Rules affect preview only; source markdown is not mutated. |
+| `previewRules.markdown` | `Array` | `[]` | Rules executed before markdown-it render. Use for include directives, macros, or preview-only markdown expansion. |
+| `previewRules.html` | `Array` | `[]` | Rules executed after markdown-it render and before preview sanitization. Use for HTML rewrites such as image URL prefixing or include decoration. |
+| `previewRules.includeResolver` | `function` | `undefined` | Shared async/sync resolver used by include-style rules. Signature: `(path, request) => Promise<string> \| string`. |
+| `previewRules.policy.runtime.ruleTimeoutMs` | `number` | `1200` | Per-rule timeout for async preview rules. |
+| `previewRules.policy.runtime.failMode` | `'continue' \| 'stop-phase' \| 'stop-pipeline'` | `'continue'` | Error handling mode for preview rules. |
+| `previewRules.policy.include.maxDepth` | `number` | `5` | Max nested include depth. |
+| `previewRules.policy.include.allowPaths` | `string[]` | `[]` | Optional allowlist for include targets. |
 | `upload.endpoint` | `string` | `undefined` | Default upload endpoint (`POST multipart/form-data`) used for all file types with no matching entry in `upload.endpoints`. Images fall back to base64 when omitted or on error; non-image files require an endpoint and are rejected without one. |
 | `upload.endpoints` | `Object.<string,string>` | `undefined` | Per-type endpoint overrides. Keys can be a MIME type (`image/png`), a wildcard (`image/*`), or a file extension (`.pdf`). The first matching entry wins; unmatched files fall back to `upload.endpoint`. Example: `{ 'image/*': '/upload/image', 'application/pdf': '/upload/raw' }` |
 | `upload.headers` | `object` | `{}` | Extra HTTP headers for upload requests (e.g. `Authorization`). |
@@ -162,9 +171,201 @@ Importing the library registers the custom element as a side effect.
 | `onCompatibilityReport` | `function` | `undefined` | Called with latest compatibility report object. |
 | `onCompatibilityStatusChange` | `function` | `undefined` | Called with `(status, report)` on status transitions. |
 | `onCompatibilityFixApplied` | `function` | `undefined` | Called after user accepts compatibility fix proposal. |
+| `onPreviewRulesChanged` | `function` | `undefined` | Called when preview rules are registered, removed, toggled, or replaced. |
+| `onPreviewRuleError` | `function` | `undefined` | Called with `(error, context)` when a preview rule throws or times out. |
+| `onPreviewPipelineFinished` | `function` | `undefined` | Called with execution summary `{ renderVersion, ruleCount, rules }` after preview-rules pipeline completes. |
 | `onBusyChange` | `function` | `undefined` | Called with busy overlay state `{ busy, count, label, detail, scope, locked, canCancel, cancelToken }`. |
 | `onAIResponse` | `function` | `undefined` | Called with `(result, request)` after a successful AI response. |
 | `onAIError` | `function` | `undefined` | Called with `(error, request)` when AI request fails. |
+
+## Preview Rules
+
+Preview rules are a preview-only transformation pipeline layered around markdown-it render.
+
+Phase order:
+
+1. `markdown` rules run on the source markdown string.
+2. `markdown-it` renders the transformed markdown to HTML.
+3. `html` rules run on the rendered HTML.
+4. Preview HTML is sanitized and mounted.
+
+Use cases:
+
+- expand include-like directives without changing source markdown,
+- prefix or normalize image/link URLs in preview,
+- decorate preview-only regions such as includes,
+- inject custom preview affordances or badges.
+
+Important semantics:
+
+- Rules affect preview only. They do not overwrite the code editor contents.
+- Async rules are version-guarded, so stale results do not overwrite newer renders.
+- HTML-phase rules run before sanitization.
+
+### Built-in preview rule helpers
+
+The package exports these helpers:
+
+- `createImageRelativeSrcPrefixRule(...)`
+- `createMarkdownIncludeDirectiveRule(...)`
+- `createIncludeSourceMapRule(...)`
+- `createIncludeDecorationRule(...)`
+- `PreviewRulesEngine`
+
+### Example: prefix relative image URLs in preview
+
+This is an HTML-phase rule because it rewrites rendered `<img src="...">` attributes.
+
+```js
+import {
+  createEditor,
+  createImageRelativeSrcPrefixRule,
+} from 'smart-md-editor';
+
+const editor = createEditor('#editor', {
+  value: '![Cloud image](/content/assets/image1.jpg)',
+  previewRules: {
+    html: [
+      createImageRelativeSrcPrefixRule({
+        id: 'cloud-image-prefix',
+        prefix: 'https://mycloudspace.org',
+      }),
+    ],
+  },
+});
+```
+
+Result in preview:
+
+- `/content/assets/image1.jpg` becomes `https://mycloudspace.org/content/assets/image1.jpg`
+- absolute URLs (`https://...`, `data:`, `blob:`) are left unchanged
+
+### Example: include directives with source mapping and decoration
+
+This is a mixed markdown + HTML pipeline:
+
+- markdown phase expands `{% include "..." %}`,
+- HTML phase remaps preview clicks back to the include directive line,
+- HTML phase decorates the expanded region with a collapsible wrapper.
+
+```js
+import {
+  createEditor,
+  createMarkdownIncludeDirectiveRule,
+  createIncludeSourceMapRule,
+  createIncludeDecorationRule,
+} from 'smart-md-editor';
+
+const editor = createEditor('#editor', {
+  value: '{% include "snippets/snippet1.md" %}',
+  previewRules: {
+    markdown: [
+      createMarkdownIncludeDirectiveRule({
+        id: 'includes',
+        annotate: true,
+        allowPaths: ['snippets/'],
+        async resolve(path) {
+          const response = await fetch(path);
+          if (!response.ok) {
+            throw new Error(`Failed to load include file: ${path}`);
+          }
+          return response.text();
+        },
+      }),
+    ],
+    html: [
+      createIncludeSourceMapRule({
+        id: 'include-source-map',
+      }),
+      createIncludeDecorationRule({
+        id: 'include-decoration',
+        collapsible: true,
+        defaultCollapsed: false,
+      }),
+    ],
+  },
+});
+```
+
+Notes:
+
+- `annotate: true` enables helper metadata used by source mapping and decoration helpers.
+- `createIncludeSourceMapRule()` maps clicks inside expanded include content back to the include directive line in source markdown.
+- `createIncludeDecorationRule()` wraps the expanded region in a preview-only `details/summary` block.
+
+### Example: fully custom preview rule
+
+This demo-style rule turns every standalone `florek` into a badge in preview.
+
+```js
+const editor = createEditor('#editor', {
+  value: 'Say hello to florek in the preview.',
+  previewRules: {
+    markdown: [
+      {
+        id: 'florek-badge',
+        phase: 'markdown',
+        order: 90,
+        run(input) {
+          return String(input ?? '').replace(
+            /\bflorek\b/gi,
+            '<span class="my-florek-badge">Emperor Florek</span>',
+          );
+        },
+      },
+    ],
+  },
+});
+```
+
+Because this outputs HTML, make sure your markdown-it config allows HTML in preview if your project disables it.
+
+### Runtime management API
+
+Preview rules can be managed at runtime using either direct methods on the editor instance or the `editor.previewRules` facade.
+
+```js
+const includeRule = createMarkdownIncludeDirectiveRule({
+  id: 'runtime-include',
+  annotate: true,
+  async resolve(path) {
+    const response = await fetch(path);
+    return response.text();
+  },
+});
+
+editor.registerPreviewRule(includeRule);
+await editor.rebuildPreview({ preserveScroll: true });
+
+editor.disablePreviewRule('runtime-include');
+editor.enablePreviewRule('runtime-include');
+editor.unregisterPreviewRule('runtime-include');
+
+// Equivalent facade style:
+editor.previewRules.register(includeRule);
+editor.previewRules.disable('runtime-include');
+editor.previewRules.enable('runtime-include');
+editor.previewRules.unregister('runtime-include');
+```
+
+### Preview rules callbacks example
+
+```js
+const editor = createEditor('#editor', {
+  previewRules: {
+    markdown: [/* ... */],
+  },
+  onPreviewRulesChanged(detail) {
+    console.log('Preview rules changed:', detail);
+  },
+  onPreviewRuleError(error, context) {
+    console.error('Preview rule failed:', context?.id, error);
+  },
+  onPreviewPipelineFinished(detail) {
+    console.log('Preview pipeline finished:', detail.ruleCount, detail.rules);
+  },
+});
+```
 
 ## AI Assistant
 
@@ -568,6 +769,19 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `setAIProvider` | `(provider) => void` | Replace the active AI provider at runtime. |
 | `getAIProvider` | `() => object \| null` | Read the current AI provider instance. |
 | `requestAIAssistant` | `(request) => Promise<{ mode, text, suggestedMarkdown }>` | Send an AI request programmatically using the active provider. |
+| `getPreviewRules` | `() => object[]` | Get current preview rule descriptors. |
+| `getPreviewRuleById` | `(id) => object \| null` | Get one preview rule descriptor by id. |
+| `registerPreviewRule` | `(rule) => void` | Register one preview rule and rebuild preview. |
+| `registerPreviewRules` | `(rules) => void` | Register multiple preview rules and rebuild preview. |
+| `unregisterPreviewRule` | `(id) => boolean` | Remove one preview rule by id and rebuild preview. |
+| `clearPreviewRules` | `(phase?) => void` | Remove all preview rules, or all rules for one phase. |
+| `enablePreviewRule` | `(id) => boolean` | Enable one preview rule and rebuild preview. |
+| `disablePreviewRule` | `(id) => boolean` | Disable one preview rule and rebuild preview. |
+| `setPreviewRuleEnabled` | `(id, enabled) => boolean` | Toggle one preview rule and rebuild preview. |
+| `updatePreviewRuleConfig` | `(id, patch) => boolean` | Patch one preview rule config object and rebuild preview. |
+| `replacePreviewRules` | `({ markdown?, html? }) => void` | Replace all preview rules in one call. |
+| `rebuildPreview` | `(opts?) => Promise<void>` | Re-run preview pipeline manually. Supports `opts.preserveScroll=true`. |
+| `getPreviewRulesMetrics` | `() => object` | Return basic per-rule execution metrics. |
 | `registerAction` | `(actionDef)` | Register custom toolbar action. |
 | `unregisterAction` | `(id)` | Remove custom toolbar action. |
 | `getToolbarConfig` | `() => object \| null` | Get the current declarative toolbar config, if one is active. |
@@ -628,6 +842,33 @@ const result = await editor.requestAIAssistant({
 
 console.log(result.text);
 console.log(result.suggestedMarkdown);
+```
+
+### Example: runtime preview rules toggle
+
+```js
+const includeRule = createMarkdownIncludeDirectiveRule({
+  id: 'runtime-include',
+  annotate: true,
+  async resolve(path) {
+    const response = await fetch(path);
+    return response.text();
+  },
+});
+
+let enabled = false;
+
+async function toggleIncludeRule() {
+  if (!enabled) {
+    editor.registerPreviewRule(includeRule);
+    enabled = true;
+  } else {
+    editor.unregisterPreviewRule('runtime-include');
+    enabled = false;
+  }
+
+  await editor.rebuildPreview({ preserveScroll: true });
+}
 ```
 
 ### Example: proposal apply modes
@@ -717,6 +958,15 @@ const editor = createEditor('#editor', {
   onPreviewClick(element, range) {
     // range: { from, to }
   },
+  onPreviewRulesChanged(detail) {
+    console.log(detail);
+  },
+  onPreviewRuleError(error, context) {
+    console.warn(context?.id, error.message);
+  },
+  onPreviewPipelineFinished(detail) {
+    console.log(detail.ruleCount);
+  },
   onUploadStart(file) {
     console.log('Uploading:', file.name);
   },
@@ -744,6 +994,9 @@ const editor = createEditor('#editor', {
 - `se-change`: `detail = { markdown, tokens, html }`
 - `se-selection-change`: `detail = { from, to, text, lineFrom, lineTo }`
 - `se-preview-click`: `detail = { element, lineRange: { from, to } }`
+- `se-preview-rules-changed`: `detail = { ...changeDetail }`
+- `se-preview-rule-error`: `detail = { error, context }`
+- `se-preview-pipeline-finished`: `detail = { renderVersion, ruleCount, rules }`
 - `se-busy-change`: `detail = { busy, count, label, detail, scope, locked, canCancel, cancelToken }`
 - `se-ai-response`: `detail = { result, request }`
 - `se-ai-error`: `detail = { error, request }`
@@ -1208,6 +1461,8 @@ createEditor(element, {
 - Preview HTML is sanitized with DOMPurify before rendering.
 - If you add custom parser output attributes/tags needed in preview, update the allowlist in `src/ui/PreviewPanel.js`.
 - Upload endpoint must validate file type/size server-side as well.
+- Preview rules execute in your application context. Treat custom rules, include resolvers, and fetched include content as trusted integration code.
+- HTML-phase rules run before sanitization, so they may add structure/attributes that are later stripped unless allowed by the preview sanitizer.
 
 ## License
 

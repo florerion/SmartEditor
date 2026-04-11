@@ -8,7 +8,41 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
-## [0.8.0] - 2026-04-10
+## [v0.9.0] - 2026-04-11
+
+### Added
+- Added preview transformation rules with two-phase pipeline support (`markdown` before render, `html` after render and before sanitization).
+- Added public preview-rules runtime API on the editor instance and `<smart-editor>` wrapper, including registration, toggling, replacement, rebuild, and metrics helpers.
+- Added built-in preview-rules helpers for relative image URL prefixing, include directive expansion, include source-line remapping, and include decoration.
+- Added web component preview-rules events: `se-preview-rules-changed`, `se-preview-rule-error`, and `se-preview-pipeline-finished`.
+- Added preview-rules unit and integration coverage, including async stale-render protection, include click mapping, and preserve-scroll rebuild behavior.
+
+### Changed
+- Extended preview rendering pipeline in `EditorCore` to support sync/async preview rules with abort/version guards.
+- Improved preview rebuild stability so runtime rule changes and include expansion preserve preview position more reliably.
+- Expanded preview sanitization allowlist to support preview-only include decoration using `details` and `summary`.
+- Updated demo to showcase preview rules with image URL rewriting, runtime include toggling, include decoration UX, and a custom `florek` transformation rule.
+
+### Fixed
+- Fixed stale async preview-rule results so older pipeline completions do not overwrite newer renders.
+- Fixed expanded include preview interactions so clicks inside included content map back to the original include directive line.
+- Fixed preview jump behavior when enabling, disabling, or rebuilding include-based preview rules.
+
+### Docs
+- Documented the preview-rules system in README, including configuration, lifecycle, runtime API, callbacks/events, examples, and security notes.
+
+### Tests
+- Added dedicated tests for `PreviewRulesEngine`, `EditorCore` preview-rules behavior, and end-to-end preview-rules integration flows.
+
+## [v0.8.1] - 2026-04-11
+
+### Fixed
+- Fixed test stability so the test suite passes reliably in GitHub CI.
+
+### Infrastructure
+- Adjusted automated test execution for the GitHub environment.
+
+## [v0.8.0] - 2026-04-10
 
 ### Added
 - Added `onPreviewRendered(markdown, tokens, html)` callback for integrations that need rendered payloads.
@@ -88,7 +122,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Fixed
 - Fixed ordered list indentation, outdent, and renumbering behavior.
 
-## [0.5.1] - 2026-03-28
+## [v0.5.1] - 2026-03-28
 
 ### Changed
 - Updated npm packaging: lightweight smart-md-editor package plus optional draw.io self-hosting assets.
@@ -123,7 +157,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Infrastructure
 - Added and refined GitHub Pages workflow and repository hygiene updates (including dist handling).
 
-## [0.2.0] - Historical
+## [v0.2.0] - Historical
 
 ### Added
 - Added declarative `toolbar` config for explicit grouping, ordering, display mode selection, and dropdown menus.
@@ -131,7 +165,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Added runtime toolbar helper methods for granular updates (`updateToolbarConfig`, `upsert/remove` for groups/items/dropdown items).
 - Added inline async toolbar item handlers: `run(api, state, args?)`.
 
-## [0.1.0] - Historical
+## [v0.1.0] - Historical
 
 ### Added
 - Initial public integration surface:
@@ -146,16 +180,18 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ## Notes on Historical Reconstruction
 
 - Versions before tagged releases were reconstructed from documented project history and git commit/PR metadata.
-- Tag naming is preserved as published (both `0.5.1` and `v*` tags exist in repository history).
+- Changelog version notation is normalized to `vX.Y.Z` for consistency.
 
-[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.8.0...HEAD
-[0.8.0]: https://github.com/florerion/SmartEditor/compare/v0.7.4...v0.8.0
+[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.9.0...HEAD
+[v0.9.0]: https://github.com/florerion/SmartEditor/compare/v0.8.1...v0.9.0
+[v0.8.1]: https://github.com/florerion/SmartEditor/compare/v0.8.0...v0.8.1
+[v0.8.0]: https://github.com/florerion/SmartEditor/compare/v0.7.4...v0.8.0
 [v0.7.4]: https://github.com/florerion/SmartEditor/compare/v0.7.3...v0.7.4
 [v0.7.3]: https://github.com/florerion/SmartEditor/compare/v0.7.2...v0.7.3
 [v0.7.2]: https://github.com/florerion/SmartEditor/compare/v0.7.1...v0.7.2
 [v0.7.1]: https://github.com/florerion/SmartEditor/compare/v0.7.0...v0.7.1
 [v0.7.0]: https://github.com/florerion/SmartEditor/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/florerion/SmartEditor/compare/v0.5.2...v0.6.0
-[v0.5.2]: https://github.com/florerion/SmartEditor/compare/0.5.1...v0.5.2
-[0.5.1]: https://github.com/florerion/SmartEditor/compare/v0.5.0...0.5.1
+[v0.5.2]: https://github.com/florerion/SmartEditor/compare/v0.5.1...v0.5.2
+[v0.5.1]: https://github.com/florerion/SmartEditor/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/florerion/SmartEditor/releases/tag/v0.5.0

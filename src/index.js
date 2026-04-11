@@ -19,6 +19,13 @@ export { PromptRegistry } from './core/ai/PromptRegistry.js';
 export { OllamaAIProvider } from './core/ai/OllamaAIProvider.js';
 export { TokenAuthAIProvider } from './core/ai/TokenAuthAIProvider.js';
 export { OpenAICompatibleAIProvider } from './core/ai/OpenAICompatibleAIProvider.js';
+export { PreviewRulesEngine } from './core/preview/PreviewRulesEngine.js';
+export {
+  createImageRelativeSrcPrefixRule,
+  createMarkdownIncludeDirectiveRule,
+  createIncludeSourceMapRule,
+  createIncludeDecorationRule,
+} from './core/preview/rules.js';
 export { EDITOR_THEME_PRESETS, getEditorThemeList } from './styles/themes.js';
 export {
   createMarkdownItCompatibilityProfile,

@@ -16,6 +16,9 @@ import { EditorCore } from '../core/EditorCore.js';
  *   se-compatibility-report        CustomEvent({ detail: report })
  *   se-compatibility-status-change CustomEvent({ detail: { status, report } })
  *   se-compatibility-fix-applied   CustomEvent({ detail: payload })
+ *   se-preview-rules-changed        CustomEvent({ detail: payload })
+ *   se-preview-rule-error           CustomEvent({ detail: { error, context } })
+ *   se-preview-pipeline-finished    CustomEvent({ detail: payload })
  *   se-busy-change                 CustomEvent({ detail: busyState })
  *   se-ai-response                 CustomEvent({ detail: { result, request } })
  *   se-ai-error                    CustomEvent({ detail: { error, request } })
@@ -90,6 +93,30 @@ export class SmartEditorElement extends HTMLElement {
 
       onCompatibilityFixApplied: (payload) => {
         this.dispatchEvent(new CustomEvent('se-compatibility-fix-applied', {
+          bubbles: true, composed: true,
+          detail: payload,
+        }));
+      },
+
+      onPreviewRulesChanged: (payload) => {
+        this.dispatchEvent(new CustomEvent('se-preview-rules-changed', {
+          bubbles: true, composed: true,
+          detail: payload,
+        }));
+      },
+
+      onPreviewRuleError: (error, context) => {
+        this.dispatchEvent(new CustomEvent('se-preview-rule-error', {
+          bubbles: true, composed: true,
+          detail: {
+            error: error instanceof Error ? error.message : String(error),
+            context,
+          },
+        }));
+      },
+
+      onPreviewPipelineFinished: (payload) => {
+        this.dispatchEvent(new CustomEvent('se-preview-pipeline-finished', {
           bubbles: true, composed: true,
           detail: payload,
         }));
@@ -178,6 +205,20 @@ export class SmartEditorElement extends HTMLElement {
   setAIProvider(provider)   { return this._editor?.setAIProvider(provider); }
   getAIProvider()           { return this._editor?.getAIProvider(); }
   requestAIAssistant(request) { return this._editor?.requestAIAssistant(request); }
+  get previewRules()          { return this._editor?.previewRules; }
+  getPreviewRules()           { return this._editor?.getPreviewRules(); }
+  getPreviewRuleById(id)      { return this._editor?.getPreviewRuleById(id); }
+  registerPreviewRule(rule)   { return this._editor?.registerPreviewRule(rule); }
+  registerPreviewRules(rules) { return this._editor?.registerPreviewRules(rules); }
+  unregisterPreviewRule(id)   { return this._editor?.unregisterPreviewRule(id); }
+  clearPreviewRules(phase)    { return this._editor?.clearPreviewRules(phase); }
+  enablePreviewRule(id)       { return this._editor?.enablePreviewRule(id); }
+  disablePreviewRule(id)      { return this._editor?.disablePreviewRule(id); }
+  setPreviewRuleEnabled(id, enabled) { return this._editor?.setPreviewRuleEnabled(id, enabled); }
+  updatePreviewRuleConfig(id, patch) { return this._editor?.updatePreviewRuleConfig(id, patch); }
+  replacePreviewRules(input)  { return this._editor?.replacePreviewRules(input); }
+  rebuildPreview(opts)        { return this._editor?.rebuildPreview(opts); }
+  getPreviewRulesMetrics()    { return this._editor?.getPreviewRulesMetrics(); }
   destroy()                 { this._editor?.destroy(); this._editor = null; }
 }
 

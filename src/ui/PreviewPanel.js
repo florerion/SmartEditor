@@ -36,7 +36,7 @@ export class PreviewPanel {
 
   _sanitize(html) {
     return DOMPurify.sanitize(html, {
-      ADD_TAGS: ['pre', 'code', 'select', 'option', 'button', 'input'],
+      ADD_TAGS: ['pre', 'code', 'select', 'option', 'button', 'input', 'details', 'summary'],
       // Allow data-source-* attributes so sync continues to work after DOMPurify
       ADD_ATTR: [
         'data-source-line',
