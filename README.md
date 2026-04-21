@@ -129,6 +129,7 @@ Importing the library registers the custom element as a side effect.
 | `upload.endpoint` | `string` | `undefined` | Default upload endpoint (`POST multipart/form-data`) used for all file types with no matching entry in `upload.endpoints`. Images fall back to base64 when omitted or on error; non-image files require an endpoint and are rejected without one. |
 | `upload.endpoints` | `Object.<string,string>` | `undefined` | Per-type endpoint overrides. Keys can be a MIME type (`image/png`), a wildcard (`image/*`), or a file extension (`.pdf`). The first matching entry wins; unmatched files fall back to `upload.endpoint`. Example: `{ 'image/*': '/upload/image', 'application/pdf': '/upload/raw' }` |
 | `upload.headers` | `object` | `{}` | Extra HTTP headers for upload requests (e.g. `Authorization`). |
+| `upload.credentials` | `'omit' \| 'same-origin' \| 'include'` | browser default | Fetch credentials mode for upload requests. Set `'include'` to send cookies/HTTP auth also for cross-origin endpoints. |
 | `upload.extraFields` | `object` | `{}` | Extra FormData fields appended to every upload (e.g. `{ upload_preset: 'my_preset' }` for Cloudinary unsigned upload). |
 | `upload.responseUrlField` | `string` | `'url'` | JSON field in the upload response that holds the asset URL (e.g. `'secure_url'` for Cloudinary). |
 | `upload.maxSize` | `number` | `5 * 1024 * 1024` | Max image size in bytes. |

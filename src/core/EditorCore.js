@@ -66,6 +66,7 @@ export class EditorCore {
   *                                                wildcards (`image/*`) or extensions (`.pdf`). First match wins.
   *                                                Example: `{ 'image/*': '/img/upload', '.pdf': '/doc/upload' }`
    * @param {object}      [opts.upload.headers]     e.g. { Authorization: 'Bearer ...' }
+  * @param {'omit'|'same-origin'|'include'} [opts.upload.credentials] Fetch credentials mode for upload requests
    * @param {number}      [opts.upload.maxSize]     max image size in bytes, default 5 MB
    * @param {number}      [opts.upload.fileMaxSize] max non-image size in bytes, default equals maxSize
    * @param {string[]}    [opts.upload.formats]     allowed image MIME types, default common images

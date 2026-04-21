@@ -746,6 +746,7 @@ Click an element in **preview** and the code cursor jumps to the matching line.
         endpoints: {
           'image/*': 'https://api.cloudinary.com/v1_1/doz92xadt/image/upload', // images
         },
+        credentials: 'include', // send cookies/auth with upload request when your backend requires session auth
         extraFields: { upload_preset: 'SmartEditorDemo' },                
         responseUrlField: 'secure_url',
         maxSize: 10 * 1024 * 1024, // 10 MB (Cloudinary free plan limit)

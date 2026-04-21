@@ -26,6 +26,7 @@ export class AssetUploadHandler {
   *                                                   or extension (`'.pdf'`). First matching entry wins.
   *                                                   Example: `{ 'image/*': '/img/upload', '.pdf': '/doc/upload' }`
   * @param {object}       [uploadOpts.headers]        Extra HTTP headers sent with the upload request.
+  * @param {'omit'|'same-origin'|'include'} [uploadOpts.credentials] Fetch credentials mode for upload requests.
    * @param {object}       [uploadOpts.extraFields]    Extra FormData fields appended to every upload
    *                                                   (e.g. `{ upload_preset: 'my_preset' }` for Cloudinary).
    * @param {string}       [uploadOpts.responseUrlField='url']  Response JSON field that holds the asset URL
@@ -198,14 +199,29 @@ export class AssetUploadHandler {
       body.append(key, String(val));
     }
     const headers = { ...this._opts.headers };
+    const credentials = this._resolveCredentials();
 
-    const resp = await fetch(this._resolveEndpoint(file), { method: 'POST', body, headers, signal });
+    const resp = await fetch(this._resolveEndpoint(file), {
+      method: 'POST',
+      body,
+      headers,
+      signal,
+      ...(credentials ? { credentials } : {}),
+    });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
 
     const data = await resp.json();
     const urlField = this._opts.responseUrlField ?? 'url';
     if (typeof data?.[urlField] !== 'string') throw new Error(`Upload response missing "${urlField}" field`);
     return data[urlField];
+  }
+
+  _resolveCredentials() {
+    const value = this._opts.credentials;
+    if (value === 'omit' || value === 'same-origin' || value === 'include') {
+      return value;
+    }
+    return null;
   }
 
   _toBase64(file, signal) {
