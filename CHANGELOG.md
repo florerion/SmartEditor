@@ -8,6 +8,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
+## [v0.9.1] - 2026-04-21
+
+### Added
+- Added upload request credentials option (`upload.credentials`) with supported fetch modes: `omit`, `same-origin`, `include`.
+
+### Changed
+- Updated upload pipeline docs and API JSDoc to include credentials configuration.
+- Updated demo upload configuration with an explicit credentials example for authenticated upload flows.
+
 ## [v0.9.0] - 2026-04-11
 
 ### Added
