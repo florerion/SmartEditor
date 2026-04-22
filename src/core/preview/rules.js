@@ -160,6 +160,8 @@ export function createIncludeSourceMapRule(opts = {}) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(String(input ?? ''), 'text/html');
       const starts = Array.from(doc.body.querySelectorAll('[data-se-include-start]'));
+      const includeMappedElements = new Set();
+      const includeRanges = [];
 
       let touched = false;
       starts.forEach((startEl) => {
@@ -176,12 +178,53 @@ export function createIncludeSourceMapRule(opts = {}) {
           .filter((el) => el !== startEl && el !== endNode);
         elementsBetween.forEach((el) => {
           _setSourceLineAttrs(el, startMeta.sourceLine, startMeta.sourceLineEnd);
+          includeMappedElements.add(el);
           touched = true;
         });
+
+        const markerShift = Number.isInteger(startMeta.downstreamShift)
+          ? Math.max(0, startMeta.downstreamShift)
+          : 0;
+
+        const renderedEndLine = _getNodeSourceLine(endNode);
+        const fallbackShift = Number.isInteger(renderedEndLine)
+          ? Math.max(0, renderedEndLine - startMeta.sourceLine - 1)
+          : 0;
+
+        const downstreamShift = markerShift || fallbackShift;
+        if (downstreamShift > 0) {
+          includeRanges.push({
+            startNode: startEl,
+            endNode,
+            downstreamShift,
+          });
+        }
 
         if (removeMarkers) {
           parent.removeChild(startEl);
           parent.removeChild(endNode);
+        }
+      });
+
+      const topLevelRanges = includeRanges.filter((candidate) => !includeRanges.some((other) => {
+        if (other === candidate) return false;
+        return _isNodeStrictlyBetween(candidate.startNode, other.startNode, other.endNode);
+      }));
+
+      const mappedElements = Array.from(doc.body.querySelectorAll('[data-source-line]'));
+      mappedElements.forEach((el) => {
+        if (includeMappedElements.has(el)) return;
+
+        const totalShift = topLevelRanges.reduce((sum, range) => {
+          if (_isNodeAfter(el, range.endNode)) {
+            return sum + range.downstreamShift;
+          }
+          return sum;
+        }, 0);
+
+        if (totalShift > 0) {
+          _shiftSourceLineAttrs(el, -totalShift);
+          touched = true;
         }
       });
 
@@ -416,6 +459,7 @@ async function _expandIncludes(text, context, depth = 0, parentPath = null, anch
     const fullMatch = match[0];
     const includePath = String(match[1] ?? '').trim();
     const from = Number.isFinite(match.index) ? match.index : 0;
+    const isStandaloneLine = _isStandaloneDirectiveLine(source, from, fullMatch.length);
     const matchLine = _lineFromOffset(source, from);
     const sourceLine = Number.isInteger(anchorLine) ? anchorLine : matchLine;
 
@@ -458,8 +502,19 @@ async function _expandIncludes(text, context, depth = 0, parentPath = null, anch
         path: includePath,
         sourceLine,
         sourceLineEnd: sourceLine,
+        downstreamShift: 0,
       };
-      output += `${_buildIncludeStartMarker(markerMeta)}\n${expanded}\n${_buildIncludeEndMarker(markerMeta)}`;
+
+      let wrapped = `${_buildIncludeStartMarker(markerMeta)}\n\n${expanded}\n\n${_buildIncludeEndMarker(markerMeta)}`;
+      let inserted = isStandaloneLine ? `\n${wrapped}\n` : wrapped;
+      const downstreamShift = Math.max(0, _countLineBreaks(inserted) - _countLineBreaks(fullMatch));
+      if (downstreamShift > 0) {
+        markerMeta.downstreamShift = downstreamShift;
+        wrapped = `${_buildIncludeStartMarker(markerMeta)}\n\n${expanded}\n\n${_buildIncludeEndMarker(markerMeta)}`;
+        inserted = isStandaloneLine ? `\n${wrapped}\n` : wrapped;
+      }
+
+      output += inserted;
     } else {
       output += expanded;
     }
@@ -492,6 +547,7 @@ function _parseIncludeStartMarker(value) {
       path: typeof parsed.path === 'string' ? parsed.path : '',
       sourceLine: Number.isInteger(parsed.sourceLine) ? parsed.sourceLine : null,
       sourceLineEnd: Number.isInteger(parsed.sourceLineEnd) ? parsed.sourceLineEnd : null,
+      downstreamShift: Number.isInteger(parsed.downstreamShift) ? Math.max(0, parsed.downstreamShift) : null,
     };
   } catch {
     return null;
@@ -535,6 +591,41 @@ function _setSourceLineAttrs(el, line, lineEnd) {
   el.setAttribute('data-source-line-end', String(Number.isInteger(lineEnd) ? lineEnd : line));
 }
 
+function _shiftSourceLineAttrs(el, delta) {
+  if (!Number.isInteger(delta) || delta === 0) return;
+  const sourceLine = parseInt(el.getAttribute('data-source-line') ?? '', 10);
+  if (!Number.isInteger(sourceLine)) return;
+  const sourceLineEnd = parseInt(el.getAttribute('data-source-line-end') ?? '', 10);
+  const nextFrom = Math.max(0, sourceLine + delta);
+  const nextTo = Number.isInteger(sourceLineEnd)
+    ? Math.max(nextFrom, sourceLineEnd + delta)
+    : nextFrom;
+  el.setAttribute('data-source-line', String(nextFrom));
+  el.setAttribute('data-source-line-end', String(nextTo));
+}
+
+function _getNodeSourceLine(node) {
+  let current = node;
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    const value = parseInt(current.getAttribute?.('data-source-line') ?? '', 10);
+    if (Number.isInteger(value)) return value;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function _isNodeAfter(node, referenceNode) {
+  if (!node || !referenceNode) return false;
+  return Boolean(referenceNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function _isNodeStrictlyBetween(node, startNode, endNode) {
+  if (!node || !startNode || !endNode) return false;
+  const afterStart = Boolean(startNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const beforeEnd = Boolean(node.compareDocumentPosition(endNode) & Node.DOCUMENT_POSITION_FOLLOWING);
+  return afterStart && beforeEnd;
+}
+
 function _lineFromOffset(text, offset) {
   const source = String(text ?? '');
   const safeOffset = Math.max(0, Math.min(source.length, Number.isFinite(offset) ? offset : 0));
@@ -543,6 +634,30 @@ function _lineFromOffset(text, offset) {
     if (source.charCodeAt(i) === 10) line += 1;
   }
   return line;
+}
+
+function _countLineBreaks(text) {
+  const value = String(text ?? '');
+  let count = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    if (value.charCodeAt(i) === 10) count += 1;
+  }
+  return count;
+}
+
+function _isStandaloneDirectiveLine(source, from, length) {
+  if (!Number.isFinite(from) || !Number.isFinite(length) || length <= 0) return false;
+  const value = String(source ?? '');
+  const start = Math.max(0, Math.min(value.length, from));
+  const end = Math.max(start, Math.min(value.length, start + length));
+
+  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const nextNewline = value.indexOf('\n', end);
+  const lineEnd = nextNewline === -1 ? value.length : nextNewline;
+
+  const lineText = value.slice(lineStart, lineEnd).trim();
+  const directiveText = value.slice(start, end).trim();
+  return lineText.length > 0 && lineText === directiveText;
 }
 
 function _isAllowedIncludePath(targetPath, allowPaths) {

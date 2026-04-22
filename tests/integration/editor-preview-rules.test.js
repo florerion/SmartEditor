@@ -167,4 +167,53 @@ describe('EditorCore preview rules', () => {
 
     editor.destroy();
   });
+
+  it('keeps downstream preview-to-code mapping after expanded include block', async () => {
+    const sourceMap = {
+      'snippets/snippet1.md': [
+        '## Included Title',
+        '',
+        'Included paragraph line 1.',
+        'Included paragraph line 2.',
+      ].join('\n'),
+    };
+    const onPreviewClick = vi.fn();
+    const markdown = [
+      'Before include',
+      '{% include "snippets/snippet1.md" %}',
+      'After include first line',
+      'After include second line',
+    ].join('\n');
+
+    const editor = createEditor(markdown, {
+      previewRules: {
+        includeResolver: async (path) => sourceMap[path] ?? '',
+        markdown: [
+          createMarkdownIncludeDirectiveRule({ annotate: true }),
+        ],
+        html: [
+          createIncludeSourceMapRule(),
+          createIncludeDecorationRule(),
+        ],
+      },
+      onPreviewClick,
+    });
+
+    await editor.rebuildPreview();
+
+    editor._codePanel._scroller.scrollTo = vi.fn();
+
+    const previewRoot = editor._previewPanel.getRoot();
+    const afterLine = Array.from(previewRoot.querySelectorAll('p')).find((el) =>
+      (el.textContent ?? '').includes('After include first line'));
+
+    expect(afterLine).toBeTruthy();
+
+    afterLine.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(onPreviewClick).toHaveBeenCalledTimes(1);
+    expect(onPreviewClick.mock.calls[0][1].from).toBe(2);
+
+    editor.destroy();
+  });
 });

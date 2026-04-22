@@ -8,6 +8,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
+## [v0.9.2] - 2026-04-22
+
+### Fixed
+- Fixed preview-to-code line mapping drift after expanded include directives so lines below include snippets resolve to correct source lines.
+- Fixed include annotation/source-map offset handling by carrying explicit downstream line-shift metadata through the preview include pipeline.
+
+### Tests
+- Added integration regression coverage for downstream line mapping after expanded include blocks in preview-rules flows.
+
 ## [v0.9.1] - 2026-04-21
 
 ### Added
@@ -191,7 +200,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Versions before tagged releases were reconstructed from documented project history and git commit/PR metadata.
 - Changelog version notation is normalized to `vX.Y.Z` for consistency.
 
-[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.9.1...HEAD
+[v0.9.1]: https://github.com/florerion/SmartEditor/compare/v0.9.0...v0.9.1
 [v0.9.0]: https://github.com/florerion/SmartEditor/compare/v0.8.1...v0.9.0
 [v0.8.1]: https://github.com/florerion/SmartEditor/compare/v0.8.0...v0.8.1
 [v0.8.0]: https://github.com/florerion/SmartEditor/compare/v0.7.4...v0.8.0
