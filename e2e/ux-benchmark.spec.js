@@ -74,6 +74,19 @@ test('benchmark: UX latency insertText → stable preview (incremental vs full)'
         return false;
       };
 
+      // Demo enables html-phase preview rules that force full render path.
+      // Disable them during this benchmark so incremental/full comparison is meaningful.
+      const htmlRuleIdsToRestore = [];
+      const allRules = typeof editor.getPreviewRules === 'function'
+        ? editor.getPreviewRules()
+        : [];
+      allRules.forEach((rule) => {
+        if (rule?.phase === 'html' && rule?.enabled !== false && rule?.id) {
+          editor.disablePreviewRule(rule.id);
+          htmlRuleIdsToRestore.push(rule.id);
+        }
+      });
+
       // Reset to clean state between modes.
       editor.setMarkdown(baseDoc, { undoable: false });
       await poll(() => !editor._hasPendingPreviewAsyncWork(), 60, 15_000);
@@ -96,44 +109,49 @@ test('benchmark: UX latency insertText → stable preview (incremental vs full)'
         return result;
       };
 
-      // Warm-up: two edits to ensure caches/JIT are primed.
-      for (let w = 0; w < 2; w += 1) {
-        renderStartMs = null;
-        editor.insertText('w');
-        await poll(() => renderStartMs !== null, 30, 5_000);
-        await poll(() => !editor._hasPendingPreviewAsyncWork(), 30, 5_000);
-      }
-
       const ITERATIONS = 10;
       const timings = [];
 
-      for (let i = 0; i < ITERATIONS; i += 1) {
-        renderStartMs = null;
+      try {
+        // Warm-up: two edits to ensure caches/JIT are primed.
+        for (let w = 0; w < 2; w += 1) {
+          renderStartMs = null;
+          editor.insertText('w');
+          await poll(() => renderStartMs !== null, 30, 5_000);
+          await poll(() => !editor._hasPendingPreviewAsyncWork(), 30, 5_000);
+        }
 
-        const t0 = performance.now();
+        for (let i = 0; i < ITERATIONS; i += 1) {
+          renderStartMs = null;
 
-        // insertText triggers: CM change → onChange → _schedulePreviewUpdate (debounce).
-        editor.insertText('x');
+          const t0 = performance.now();
 
-        // 1. Wait for debounce to fire (renderStartMs set at top of _updatePreview).
-        const debounceOk = await poll(() => renderStartMs !== null, 30, 6_000);
+          // insertText triggers: CM change -> onChange -> _schedulePreviewUpdate (debounce).
+          editor.insertText('x');
 
-        // 2. Wait for any async image loads / mermaid renders to settle.
-        const asyncOk = await poll(() => !editor._hasPendingPreviewAsyncWork(), 30, 6_000);
+          // 1. Wait for debounce to fire (renderStartMs set at top of _updatePreview).
+          const debounceOk = await poll(() => renderStartMs !== null, 30, 6_000);
 
-        const t1 = performance.now();
+          // 2. Wait for any async image loads / mermaid renders to settle.
+          const asyncOk = await poll(() => !editor._hasPendingPreviewAsyncWork(), 30, 6_000);
 
-        timings.push({
-          total: t1 - t0,
-          debounce: debounceOk ? renderStartMs - t0 : null,
-          renderPlusSettle: debounceOk && asyncOk ? t1 - renderStartMs : null,
+          const t1 = performance.now();
+
+          timings.push({
+            total: t1 - t0,
+            debounce: debounceOk ? renderStartMs - t0 : null,
+            renderPlusSettle: debounceOk && asyncOk ? t1 - renderStartMs : null,
+          });
+        }
+      } finally {
+        // Restore overrides.
+        editor._updatePreview = origUpdatePreview;
+        if (typeof origCanUse === 'function') {
+          editor._canUseIncrementalPreview = origCanUse;
+        }
+        htmlRuleIdsToRestore.forEach((id) => {
+          editor.enablePreviewRule(id);
         });
-      }
-
-      // Restore overrides.
-      editor._updatePreview = origUpdatePreview;
-      if (typeof origCanUse === 'function') {
-        editor._canUseIncrementalPreview = origCanUse;
       }
 
       const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;

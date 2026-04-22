@@ -37,6 +37,19 @@ test('benchmark: incremental vs forced full preview render', async ({ page }) =>
       const editor = window.editor;
       if (!editor) throw new Error('window.editor not found');
 
+      // Demo enables html-phase preview rules that force full render path.
+      // Disable them during this benchmark so incremental/full comparison is meaningful.
+      const htmlRuleIdsToRestore = [];
+      const allRules = typeof editor.getPreviewRules === 'function'
+        ? editor.getPreviewRules()
+        : [];
+      allRules.forEach((rule) => {
+        if (rule?.phase === 'html' && rule?.enabled !== false && rule?.id) {
+          editor.disablePreviewRule(rule.id);
+          htmlRuleIdsToRestore.push(rule.id);
+        }
+      });
+
       const originalCanUseIncremental = editor._canUseIncrementalPreview?.bind(editor);
       if (modeName === 'full') {
         editor._canUseIncrementalPreview = () => false;
@@ -44,38 +57,45 @@ test('benchmark: incremental vs forced full preview render', async ({ page }) =>
         editor._canUseIncrementalPreview = originalCanUseIncremental;
       }
 
-      editor.setMarkdown(markdown, { undoable: false });
-
       const originalUpdatePreview = editor._updatePreview.bind(editor);
       const timings = [];
+      let end = 0;
+      let start = 0;
 
-      editor._updatePreview = (md, opts = {}) => {
-        const t0 = performance.now();
-        const result = originalUpdatePreview(md, opts);
-        const t1 = performance.now();
-        timings.push(t1 - t0);
-        return result;
-      };
+      try {
+        editor.setMarkdown(markdown, { undoable: false });
 
-      // Warm-up
-      for (let i = 0; i < 4; i += 1) {
-        const md = editor.getMarkdown().replace(/Tail benchmark line: \d+/, `Tail benchmark line: warm-${i}`);
-        editor.setMarkdown(md, { undoable: false });
-      }
+        editor._updatePreview = (md, opts = {}) => {
+          const t0 = performance.now();
+          const result = originalUpdatePreview(md, opts);
+          const t1 = performance.now();
+          timings.push(t1 - t0);
+          return result;
+        };
 
-      timings.length = 0;
-      const start = performance.now();
+        // Warm-up
+        for (let i = 0; i < 4; i += 1) {
+          const md = editor.getMarkdown().replace(/Tail benchmark line: [^\n]+/, `Tail benchmark line: warm-${i}`);
+          editor.setMarkdown(md, { undoable: false });
+        }
 
-      for (let i = 0; i < 20; i += 1) {
-        const md = editor.getMarkdown().replace(/Tail benchmark line: [^\n]+/, `Tail benchmark line: ${i}`);
-        editor.setMarkdown(md, { undoable: false });
-      }
+        timings.length = 0;
+        start = performance.now();
 
-      const end = performance.now();
+        for (let i = 0; i < 20; i += 1) {
+          const md = editor.getMarkdown().replace(/Tail benchmark line: [^\n]+/, `Tail benchmark line: ${i}`);
+          editor.setMarkdown(md, { undoable: false });
+        }
 
-      editor._updatePreview = originalUpdatePreview;
-      if (typeof originalCanUseIncremental === 'function') {
-        editor._canUseIncrementalPreview = originalCanUseIncremental;
+        end = performance.now();
+      } finally {
+        editor._updatePreview = originalUpdatePreview;
+        if (typeof originalCanUseIncremental === 'function') {
+          editor._canUseIncrementalPreview = originalCanUseIncremental;
+        }
+        htmlRuleIdsToRestore.forEach((id) => {
+          editor.enablePreviewRule(id);
+        });
       }
 
       const sorted = [...timings].sort((a, b) => a - b);
