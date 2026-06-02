@@ -36,6 +36,7 @@
 	- `se-compatibility-fix-applied`
 - Preserve sync mapping behavior: keep `data-source-line` / `data-source-line-end` support intact across parser and preview.
 - If introducing new HTML attributes needed in preview, update DOMPurify allowlist in `src/ui/PreviewPanel.js`.
+- Preview image resize must preserve the original markdown image URL in `data-se-markdown-src`; `ImageResize` should prefer that value and fall back to the rendered `src` when writing dimensions back to markdown.
 - Toolbar actions should follow `registerAction` schema (`id`, `group`, `order`, `run`, optional `isEnabled`/`isActive`).
 - Prefer declarative toolbar composition through `opts.toolbar` for visibility/order/group/display concerns; treat action `group/order` as fallback defaults.
 - For runtime toolbar changes, prefer `EditorCore` helper APIs (`updateToolbarConfig`, `upsert/remove` group/item/dropdown item) over manual full-config rewrites.

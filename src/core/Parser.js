@@ -520,7 +520,7 @@ export class Parser {
       const m = alt.match(/^([\s\S]*)\|(\d+)x(\d+)$/);
       if (m) { alt = m[1]; width = m[2]; height = m[3]; }
 
-      let attrs = `src="${this._escAtt(src)}" alt="${this._escAtt(alt)}" class="se-image"`;
+      let attrs = `src="${this._escAtt(src)}" alt="${this._escAtt(alt)}" class="se-image" data-se-markdown-src="${this._escAtt(src)}"`;
       if (title)  attrs += ` title="${this._escAtt(title)}"`;
       if (width)  attrs += ` width="${width}"`;
       if (height) attrs += ` height="${height}"`;

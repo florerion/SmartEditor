@@ -41,6 +41,7 @@ export class PreviewPanel {
       ADD_ATTR: [
         'data-source-line',
         'data-source-line-end',
+        'data-se-markdown-src',
         'class',
         'style',
         'type',
