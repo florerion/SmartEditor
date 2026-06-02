@@ -135,7 +135,7 @@ export class ImageResize {
   _updateMarkdown(img, width, height) {
     const api = this._getAPI();
     const md  = api.getMarkdown();
-    const src = img.getAttribute('src') ?? '';
+    const src = img.getAttribute('data-se-markdown-src') || img.getAttribute('src') || '';
 
     let newMd;
 

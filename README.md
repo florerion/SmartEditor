@@ -202,6 +202,7 @@ Important semantics:
 - Rules affect preview only. They do not overwrite the code editor contents.
 - Async rules are version-guarded, so stale results do not overwrite newer renders.
 - HTML-phase rules run before sanitization.
+- Image resize preserves the original markdown image URL in `data-se-markdown-src`, so preview rules may rewrite the rendered `src` without breaking resize updates.
 
 ### Built-in preview rule helpers
 
