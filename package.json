@@ -1,6 +1,6 @@
 {
   "name": "smart-md-editor",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "WYSIWYG Markdown editor — split view, extensible toolbar, markdown-it powered",
   "type": "module",
   "main": "dist/smart-editor.cjs.js",
