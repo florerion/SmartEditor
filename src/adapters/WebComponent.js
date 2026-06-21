@@ -7,6 +7,7 @@ import { EditorCore } from '../core/EditorCore.js';
  *   value   Initial markdown content
  *   mode    'split' | 'code' | 'preview' | 'wysiwyg'   (default: 'split')
  *   theme   'auto' or one of the built-in theme ids      (default: 'auto')
+ *   fonts   Built-in preset name or custom fonts      (default: 'system')
  *
  * DOM Events emitted:
  *   se-change           CustomEvent({ detail: { markdown, tokens, html } })
@@ -26,7 +27,7 @@ import { EditorCore } from '../core/EditorCore.js';
  * All EditorCore public methods are proxied directly on the element.
  *
  * @example
- * <smart-editor value="# Hello" mode="split" style="height:500px"></smart-editor>
+ * <smart-editor value="# Hello" mode="split" fonts="roboto" style="height:500px"></smart-editor>
  * <script>
  *   document.querySelector('smart-editor').addEventListener('se-change', e => {
  *     console.log(e.detail.markdown);
@@ -35,7 +36,7 @@ import { EditorCore } from '../core/EditorCore.js';
  */
 export class SmartEditorElement extends HTMLElement {
   static get observedAttributes() {
-    return ['value', 'mode', 'theme'];
+    return ['value', 'mode', 'theme', 'fonts'];
   }
 
   connectedCallback() {
@@ -51,6 +52,7 @@ export class SmartEditorElement extends HTMLElement {
       value: this.getAttribute('value') ?? '',
       mode:  this.getAttribute('mode')  ?? 'split',
       theme: this.getAttribute('theme') ?? 'auto',
+      fonts: this.getAttribute('fonts') ?? 'system',
 
       onPreviewRendered: (markdown, tokens, html) => {
         // Emit CustomEvent asynchronously to batch updates and reduce CPU load during rapid typing.
@@ -158,6 +160,7 @@ export class SmartEditorElement extends HTMLElement {
     if (name === 'value') this._editor.setMarkdown(newVal, { undoable: false });
     if (name === 'mode')  this._editor.setMode(newVal);
     if (name === 'theme') this._editor.setTheme(newVal ?? 'auto');
+    if (name === 'fonts') this._editor.setFont(newVal ?? 'system');
   }
 
   // Proxy all public EditorCore methods onto the element itself
@@ -190,6 +193,9 @@ export class SmartEditorElement extends HTMLElement {
   setTheme(theme)           { return this._editor?.setTheme(theme); }
   getTheme()                { return this._editor?.getTheme(); }
   getAvailableThemes()      { return this._editor?.getAvailableThemes(); }
+  setFont(font)             { return this._editor?.setFont(font); }
+  getFont()                 { return this._editor?.getFont(); }
+  getAvailableFonts()       { return this._editor?.getAvailableFonts(); }
   isBusy()                  { return this._editor?.isBusy(); }
   getBusyState()            { return this._editor?.getBusyState(); }
   beginBusyTask(opts)       { return this._editor?.beginBusyTask(opts); }
