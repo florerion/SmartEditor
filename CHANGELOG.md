@@ -8,7 +8,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
-## [v0.9.3] - 2026-06-21
+## [v0.9.4] - 2026-06-21
 
 ### Added
 - Added configurable editor fonts via new `fonts` option in `createEditor(...)` / `EditorCore` (`preset` string or custom `{ sans, mono }`).
@@ -22,6 +22,14 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Tests
 - Added unit coverage for font preset/helpers module (`tests/unit/fonts.test.js`).
 - Added integration coverage for EditorCore and Web Component font flows (`tests/integration/editor-fonts.test.js`).
+
+## [v0.9.3] - 2026-06-01
+- Image resize now preserves the original markdown image URL in [data-se-markdown-src]
+- Resize updates now prefer [data-se-markdown-src].
+- This keeps image resizing working even when preview rules rewrite image URLs in the preview.
+- Preview sanitization now allows [data-se-markdown-src] so the attribute survives DOMPurify.
+- Documentation and project instructions were updated to reflect the new behavior.
+- Added unit tests covering the new image metadata and resize fallback logic.
 
 ## [v0.9.2] - 2026-04-22
 
