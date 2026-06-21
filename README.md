@@ -116,6 +116,7 @@ Importing the library registers the custom element as a side effect.
 | `mode` | `'split' \| 'code' \| 'preview' \| 'wysiwyg'` | `'split'` | Initial view mode (`wysiwyg` is preview-first beta mode). |
 | `scrollSync` | `boolean` | `true` | In `split` mode, synchronizes vertical scrolling between code and preview using smooth animated follow. |
 | `theme` | `'auto' \| 'light' \| 'dark' \| 'sepia' \| 'midnight' \| 'solarized' \| 'nord' \| 'high-contrast'` | `'auto'` | Theme id applied to the editor root. `auto` follows the OS color scheme; the built-in presets can also be switched at runtime. |
+| `fonts` | `string \| { sans?: string, mono?: string }` | `'system'` | Font configuration for UI/code. Accepts a preset name (`'roboto'`, `'opensans'`, `'ubuntu'`, `'jetbrains'`, `'inter'`, `'firacode'`, `'sourcecodepro'`, `'courier'`, `'georgia'`, `'times'`) or a custom object `{ sans: 'CustomFont', mono: 'CustomMono' }`. User is responsible for providing CSS via `@font-face` if using non-system fonts. |
 | `markdown.options` | `object` | `{}` | Options passed to `markdown-it`. |
 | `markdown.plugins` | `Array` | `[]` | Extra markdown-it plugins: `[[pluginFn, pluginOpts?], ...]`. |
 | `previewRules.enabled` | `boolean` | `true` | Enables the preview transformation pipeline. Rules affect preview only; source markdown is not mutated. |
@@ -734,6 +735,39 @@ Built-in presets:
 - `nord`: cool arctic dark palette
 - `high-contrast`: accessibility-focused very high contrast variant
 
+### Example: font configuration
+
+```js
+// Initialize with preset font
+const editor = createEditor('#editor', {
+  fonts: 'roboto', // or 'opensans', 'ubuntu', 'jetbrains', etc.
+});
+
+// Switch font at runtime
+editor.setFont('ubuntu');
+console.log(editor.getFont()); // 'ubuntu'
+
+// Use custom font (requires @font-face in your CSS)
+editor.setFont({ sans: 'FontCompany', mono: 'FontCompanyMono' });
+console.log(editor.getAvailableFonts()); // List all built-in presets
+```
+
+Built-in font presets:
+
+- `system`: default system fonts (system-ui, Menlo, Consolas)
+- `roboto`: Google Roboto font family
+- `opensans`: Open Sans + Source Code Pro
+- `ubuntu`: Ubuntu font family
+- `jetbrains`: JetBrains Mono for code
+- `inter`: Inter + Source Code Pro
+- `firacode`: Fira Code with ligatures
+- `sourcecodepro`: Adobe Source family
+- `courier`: Classic Courier monospace
+- `georgia`: Georgia serif
+- `times`: Times New Roman serif
+
+**Note on custom fonts**: When providing custom font names, ensure you have CSS `@font-face` definitions or web font imports in your document. The editor will apply the font names via CSS custom properties (`--se-font-sans` and `--se-font-mono`), but does not bundle fonts.
+
 ## Runtime API
 
 Returned editor instance (or `<smart-editor>` proxies) provides:
@@ -756,6 +790,9 @@ Returned editor instance (or `<smart-editor>` proxies) provides:
 | `setTheme` | `(theme) => string` | Switch theme to `auto` or one of the registered built-in theme ids. |
 | `getTheme` | `() => string` | Read current theme id. |
 | `getAvailableThemes` | `() => { id, label, description, scheme }[]` | List built-in theme metadata for selectors/settings UIs. |
+| `setFont` | `(fontConfig) => string \| { sans, mono }` | Switch font preset (e.g., `'roboto'`) or apply custom font object `{ sans, mono }`. Returns normalized font config. |
+| `getFont` | `() => string \| { sans, mono }` | Read current font config: preset name or custom object. |
+| `getAvailableFonts` | `() => { id, label, description, sans, mono }[]` | List built-in font presets for selectors/settings UIs. |
 | `isBusy` | `() => boolean` | Returns whether any tracked async task is currently active. |
 | `getBusyState` | `() => object` | Returns current busy state snapshot. |
 | `beginBusyTask` | `(opts?) => string` | Start a manual busy task and return its token. |

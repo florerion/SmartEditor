@@ -8,6 +8,21 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 - No unreleased changes yet.
 
+## [v0.9.3] - 2026-06-21
+
+### Added
+- Added configurable editor fonts via new `fonts` option in `createEditor(...)` / `EditorCore` (`preset` string or custom `{ sans, mono }`).
+- Added runtime font API: `setFont(...)`, `getFont()`, and `getAvailableFonts()`.
+- Added built-in font preset registry and helpers (`EDITOR_FONT_PRESETS`, `getEditorFontList`, `isEditorFont`, `createCustomFontSet`, `normalizeFontConfig`).
+- Added Web Component font support with `fonts` attribute on `<smart-editor>` and proxied font methods.
+
+### Docs
+- Updated README with font configuration options, preset list, custom `@font-face` guidance, and runtime API examples.
+
+### Tests
+- Added unit coverage for font preset/helpers module (`tests/unit/fonts.test.js`).
+- Added integration coverage for EditorCore and Web Component font flows (`tests/integration/editor-fonts.test.js`).
+
 ## [v0.9.2] - 2026-04-22
 
 ### Fixed
@@ -200,7 +215,9 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Versions before tagged releases were reconstructed from documented project history and git commit/PR metadata.
 - Changelog version notation is normalized to `vX.Y.Z` for consistency.
 
-[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/florerion/SmartEditor/compare/v0.9.3...HEAD
+[v0.9.3]: https://github.com/florerion/SmartEditor/compare/v0.9.2...v0.9.3
+[v0.9.2]: https://github.com/florerion/SmartEditor/compare/v0.9.1...v0.9.2
 [v0.9.1]: https://github.com/florerion/SmartEditor/compare/v0.9.0...v0.9.1
 [v0.9.0]: https://github.com/florerion/SmartEditor/compare/v0.8.1...v0.9.0
 [v0.8.1]: https://github.com/florerion/SmartEditor/compare/v0.8.0...v0.8.1

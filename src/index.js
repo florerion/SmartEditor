@@ -27,6 +27,7 @@ export {
   createIncludeDecorationRule,
 } from './core/preview/rules.js';
 export { EDITOR_THEME_PRESETS, getEditorThemeList } from './styles/themes.js';
+export { EDITOR_FONT_PRESETS, getEditorFontList, isEditorFont, createCustomFontSet, normalizeFontConfig } from './styles/fonts.js';
 export {
   createMarkdownItCompatibilityProfile,
   createEleventyCompatibilityProfile,

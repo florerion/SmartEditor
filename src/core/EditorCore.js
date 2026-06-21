@@ -23,6 +23,7 @@ import { HintContextDetector } from './hints/HintContextDetector.js';
 import { PreviewRulesEngine } from './preview/PreviewRulesEngine.js';
 import { EDITOR_STYLES } from '../styles/editorStyles.js';
 import { getEditorThemeList, isEditorTheme } from '../styles/themes.js';
+import { EDITOR_FONT_PRESETS, buildEditorFontStyles, getEditorFontList, normalizeFontConfig } from '../styles/fonts.js';
 import { registerDefaultActions } from '../plugins/index.js';
 import { AssetUploadHandler, createAssetUploadAction } from '../plugins/assetUpload.js';
 
@@ -44,6 +45,7 @@ export class EditorCore {
    * @param {string}      [opts.mode='split']       'split' | 'code' | 'preview' | 'wysiwyg'
   * @param {boolean}     [opts.scrollSync=true]    Keep code/preview vertical scroll synchronized in split mode
   * @param {string}      [opts.theme='auto']       'auto' or one of the registered built-in theme ids
+  * @param {string|{sans?:string,mono?:string}} [opts.fonts='system'] Built-in font preset name (e.g., 'roboto') or custom font object { sans, mono }
    * @param {object}      [opts.markdown]
    * @param {object}      [opts.markdown.options]   Passed to markdown-it constructor
    * @param {Array}       [opts.markdown.plugins]   [[fn, opts?], ...]
@@ -191,6 +193,7 @@ export class EditorCore {
     this._busyTaskSeq = 0;
     this._busyState = _createIdleBusyState();
     this._previewRulesConfig = _resolvePreviewRulesConfig(opts.previewRules);
+    this._font = 'system';
     this._previewRulesEngine = new PreviewRulesEngine({
       enabled: this._previewRulesConfig.enabled,
       policy: this._previewRulesConfig.policy,
@@ -637,6 +640,72 @@ export class EditorCore {
     }
 
     return this._theme;
+  }
+
+  /**
+   * Get current font configuration: preset name or custom { sans, mono } object.
+   * Returns the internal preset ID if a built-in preset is active, otherwise returns a custom object.
+   *
+   * @returns {string | { sans: string, mono: string }}
+   *
+   * @example
+   * editor.getFont(); // 'roboto' or { sans: 'MyFont', mono: 'MyMono' }
+   */
+  getFont() {
+    return this._font;
+  }
+
+  /**
+   * Get list of available built-in font presets.
+   *
+   * @returns {{ id: string, label: string, description: string, sans: string, mono: string }[]} Font presets
+   *
+   * @example
+   * const fonts = editor.getAvailableFonts();
+   * fonts.forEach((f) => console.log(f.id, f.label));
+   */
+  getAvailableFonts() {
+    return getEditorFontList();
+  }
+
+  /**
+   * Change the editor's font preset or apply custom fonts.
+   * Accepts a preset name (string) or custom font object { sans?, mono? }.
+   *
+   * @param {string | { sans?: string, mono?: string }} fontConfig
+   * @returns {string | { sans: string, mono: string }} Normalized font configuration
+   * @throws {Error} If fontConfig is invalid
+   *
+   * @example
+   * editor.setFont('roboto');
+   * editor.setFont({ sans: 'MyFont', mono: 'MyMonospace' });
+   */
+  setFont(fontConfig) {
+    const normalized = normalizeFontConfig(fontConfig);
+    const { sans, mono } = normalized;
+
+    // Determine if this is a known preset by comparing fonts to all presets
+    let presetId = null;
+    for (const [id, preset] of Object.entries(EDITOR_FONT_PRESETS)) {
+      if (preset.sans === sans && preset.mono === mono) {
+        presetId = id;
+        break;
+      }
+    }
+
+    // Store preset ID if it's a known preset, otherwise store the custom object
+    this._font = presetId || normalized;
+    this._opts.fonts = this._font;
+
+    // Determine data-font attribute value
+    const dataFontValue = presetId || 'custom';
+    this._root.setAttribute('data-font', dataFontValue);
+
+    // Apply CSS custom properties
+    this._root.style.setProperty('--se-font-sans', sans);
+    this._root.style.setProperty('--se-font-mono', mono);
+
+    return this._font;
   }
 
   /**
@@ -1307,13 +1376,15 @@ export class EditorCore {
     if (document.getElementById(STYLE_TAG_ID)) return;
     const style = document.createElement('style');
     style.id = STYLE_TAG_ID;
-    style.textContent = EDITOR_STYLES;
+    const fontStyles = buildEditorFontStyles();
+    style.textContent = `${EDITOR_STYLES}\n\n${fontStyles}`;
     document.head.appendChild(style);
   }
 
   _buildDOM() {
     this._root.classList.add('se-editor');
     this.setTheme(this._opts.theme ?? 'auto');
+    this.setFont(this._opts.fonts ?? 'system');
 
     this._root.innerHTML = `
       <div class="se-layout">
